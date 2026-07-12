@@ -1,0 +1,49 @@
+{
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+	"Name": "Key Hold",
+	"Version": "1.0.0.0",
+	"Author": "John Bindel",
+	"Description": "Holds a key down for as long as you hold the Stream Deck key or pedal, and releases it when you let go. Real push-to-talk for dictation apps (Spokenly, Wispr Flow, Superwhisper), hold-to-move in games, or any feature that needs a key held rather than tapped.",
+	"Category": "Key Hold",
+	"CategoryIcon": "imgs/plugin",
+	"Icon": "imgs/plugin",
+	"UUID": "com.johnbindel.keyhold",
+	"SDKVersion": 2,
+	"Nodejs": {
+		"Version": "20",
+		"Debug": "enabled"
+	},
+	"CodePath": "bin/plugin.js",
+	"Software": {
+		"MinimumVersion": "6.5"
+	},
+	"OS": [
+		{
+			"Platform": "mac",
+			"MinimumVersion": "12"
+		},
+		{
+			"Platform": "windows",
+			"MinimumVersion": "10"
+		}
+	],
+	"Actions": [
+		{
+			"Name": "Hold Key",
+			"UUID": "com.johnbindel.keyhold.hold",
+			"Icon": "imgs/action",
+			"Tooltip": "Holds the hotkey down while pressed. Releases on release.",
+			"PropertyInspectorPath": "ui/inspector.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/action",
+					"TitleAlignment": "middle"
+				}
+			]
+		}
+	],
+	"URL": "https://github.com/johnbindel/streamdeck-keyhold"
+}

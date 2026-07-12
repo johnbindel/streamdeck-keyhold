@@ -1,0 +1,88 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  # The native helper must be compiled on its own platform. Each job produces one binary;
+  # the package job below collects both so a single .streamDeckPlugin works everywhere.
+  helper-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build keyholder (Swift)
+        run: swiftc -O -o keyholder native/keyholder.swift
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helper-macos
+          path: keyholder
+
+  helper-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build keyholder.exe (MSVC)
+        run: cl /EHsc /O2 /std:c++17 /Fe:keyholder.exe native\keyholder.cpp user32.lib
+      - uses: actions/upload-artifact@v4
+        with:
+          name: helper-windows
+          path: keyholder.exe
+
+  package:
+    needs: [helper-macos, helper-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install @elgato/streamdeck esbuild
+
+      - name: Assemble plugin
+        run: |
+          OUT=build/com.johnbindel.keyhold.sdPlugin
+          mkdir -p "$OUT/bin" "$OUT/imgs" "$OUT/ui"
+
+          # The createRequire banner is required: `ws`, a CommonJS dep inside
+          # @elgato/streamdeck, calls require("events"), which an ESM bundle cannot
+          # otherwise satisfy. Without it the plugin throws on import and Stream Deck
+          # disables it as unstable.
+          ./node_modules/.bin/esbuild src/plugin.js --bundle --platform=node --format=esm \
+            --outfile="$OUT/bin/plugin.js" \
+            --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
+
+          cp manifest.json "$OUT/manifest.json"
+          cp ui/inspector.html "$OUT/ui/inspector.html"
+          cp imgs/*.png "$OUT/imgs/"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: helper-macos
+          path: build/com.johnbindel.keyhold.sdPlugin/bin
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: helper-windows
+          path: build/com.johnbindel.keyhold.sdPlugin/bin
+
+      - name: Pack .streamDeckPlugin
+        run: |
+          chmod +x build/com.johnbindel.keyhold.sdPlugin/bin/keyholder
+          npx --yes @elgato/cli@latest pack \
+            build/com.johnbindel.keyhold.sdPlugin --output dist --force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: streamdeck-keyhold
+          path: dist/*.streamDeckPlugin
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.streamDeckPlugin

@@ -1,0 +1,10 @@
+{
+  "name": "streamdeck-keyhold",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@elgato/streamdeck": "^2.1.0",
+    "esbuild": "^0.28.1"
+  }
+}
