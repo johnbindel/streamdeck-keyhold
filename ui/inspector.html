@@ -16,6 +16,8 @@
 		select { flex: 1; background: #3d3d3d; color: #d8d8d8; border: none; border-radius: 4px; padding: 4px; }
 		.mods { display: flex; gap: 12px; flex: 1; }
 		.mods label { display: flex; align-items: center; gap: 4px; }
+		.section { margin-top: 18px; padding-top: 12px; border-top: 1px solid #3d3d3d; }
+		.section-title { margin-bottom: 10px; color: #d8d8d8; }
 		.hint { color: #7a7a7a; margin-top: 12px; line-height: 1.5; border-top: 1px solid #3d3d3d; padding-top: 10px; }
 	</style>
 </head>
@@ -33,8 +35,25 @@
 			<label><input type="checkbox" id="cmd" /> ⌘ / Win</label>
 		</div>
 	</div>
+	<div class="section">
+		<div class="section-title">On release (optional)</div>
+		<div class="row">
+			<div class="label">Key</div>
+			<select id="releaseKey"></select>
+		</div>
+		<div class="row">
+			<div class="label">Modifiers</div>
+			<div class="mods">
+				<label><input type="checkbox" id="releaseCtrl" /> ⌃</label>
+				<label><input type="checkbox" id="releaseAlt" /> ⌥</label>
+				<label><input type="checkbox" id="releaseShift" /> ⇧</label>
+				<label><input type="checkbox" id="releaseCmd" /> ⌘ / Win</label>
+			</div>
+		</div>
+	</div>
 	<div class="hint">
-		Held down while the key or pedal is held, released on release.
+		The main combo is held down while the key or pedal is held. The optional release
+		combo is tapped after you let go.
 		<br /><br />
 		Set your dictation app to <b>push-to-talk</b> on this same combo. A bare modifier
 		with no key will not work — apps that watch modifiers can tell a synthetic one from
@@ -48,14 +67,41 @@
 			"n", "o", "p", "q", "r", "s", "u", "v", "w", "x", "y", "z",
 		];
 		const MODS = ["ctrl", "alt", "shift", "cmd"];
-		const DEFAULTS = { key: "t", ctrl: true, alt: true, cmd: true, shift: false };
+		const DEFAULTS = {
+			key: "t", ctrl: true, alt: true, cmd: true, shift: false,
+			releaseKey: "", releaseCtrl: false, releaseAlt: false,
+			releaseShift: false, releaseCmd: false,
+		};
 
 		const keyEl = document.getElementById("key");
-		for (const k of KEYS) {
-			const opt = document.createElement("option");
-			opt.value = k;
-			opt.textContent = k.toUpperCase();
-			keyEl.appendChild(opt);
+		const releaseKeyEl = document.getElementById("releaseKey");
+
+		function addKeyOptions(select, includeNone = false) {
+			if (includeNone) {
+				const none = document.createElement("option");
+				none.value = "";
+				none.textContent = "None";
+				select.appendChild(none);
+			}
+			for (const k of KEYS) {
+				const opt = document.createElement("option");
+				opt.value = k;
+				opt.textContent = k.toUpperCase();
+				select.appendChild(opt);
+			}
+		}
+
+		addKeyOptions(keyEl);
+		addKeyOptions(releaseKeyEl, true);
+
+		function releaseSettingName(mod) {
+			return "release" + mod[0].toUpperCase() + mod.slice(1);
+		}
+
+		function setReleaseModifierState() {
+			for (const m of MODS) {
+				document.getElementById(releaseSettingName(m)).disabled = !releaseKeyEl.value;
+			}
 		}
 
 		let websocket, uuid, settings = {};
@@ -64,6 +110,11 @@
 			settings = {
 				key: keyEl.value,
 				...Object.fromEntries(MODS.map((m) => [m, document.getElementById(m).checked])),
+				releaseKey: releaseKeyEl.value,
+				...Object.fromEntries(MODS.map((m) => [
+					releaseSettingName(m),
+					document.getElementById(releaseSettingName(m)).checked,
+				])),
 			};
 			websocket.send(JSON.stringify({
 				event: "setSettings",
@@ -76,10 +127,22 @@
 			const s = { ...DEFAULTS, ...settings };
 			keyEl.value = s.key;
 			for (const m of MODS) document.getElementById(m).checked = !!s[m];
+			releaseKeyEl.value = s.releaseKey;
+			for (const m of MODS) {
+				document.getElementById(releaseSettingName(m)).checked = !!s[releaseSettingName(m)];
+			}
+			setReleaseModifierState();
 		}
 
 		keyEl.addEventListener("change", save);
 		for (const m of MODS) document.getElementById(m).addEventListener("change", save);
+		releaseKeyEl.addEventListener("change", () => {
+			setReleaseModifierState();
+			save();
+		});
+		for (const m of MODS) {
+			document.getElementById(releaseSettingName(m)).addEventListener("change", save);
+		}
 
 		function connectElgatoStreamDeckSocket(port, propertyInspectorUUID, registerEvent, info, actionInfo) {
 			uuid = propertyInspectorUUID;

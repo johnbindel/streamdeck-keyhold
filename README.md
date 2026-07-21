@@ -5,8 +5,9 @@ immediately. That makes push-to-talk impossible: a dictation app waiting for you
 a hotkey sees a tap and stops listening instantly.
 
 This plugin holds the hotkey for exactly as long as you hold the Stream Deck key or pedal,
-and releases it when you let go. It exists mainly for **push-to-talk dictation on macOS**,
-where nothing else did the job.
+and releases it when you let go. You can also configure an optional second hotkey that is
+tapped when you let go. It exists mainly for **push-to-talk dictation on macOS**, where
+nothing else did the job.
 
 Works with Stream Deck keys, the Stream Deck Pedal, and any other Stream Deck surface.
 
@@ -58,7 +59,8 @@ Download the `.streamDeckPlugin` file from
 [Releases](https://github.com/johnbindel/streamdeck-keyhold/releases) and double-click it.
 
 Then drag **Hold Key** onto a key or pedal, pick your combo in the property inspector, and
-set your dictation app's push-to-talk shortcut to match.
+set your dictation app's push-to-talk shortcut to match. If the target app needs a separate
+shortcut after push-to-talk ends, choose it under **On release (optional)**.
 
 On macOS, Stream Deck needs Accessibility permission to send keystrokes at all
 (System Settings → Privacy & Security → Accessibility). If your existing Hotkey actions work,
@@ -87,7 +89,7 @@ Two things in the build are load-bearing and non-obvious:
 ```
 Stream Deck key/pedal
   → plugin.js          onKeyDown → "D ctrl,alt,cmd t"      (Node, via the Elgato SDK)
-                       onKeyUp   → "U"
+                       onKeyUp   → "U", then optional "T - f13"
   → keyholder          holds the combo until told to release  (Swift on macOS, C++ on Windows)
 ```
 

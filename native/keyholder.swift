@@ -3,6 +3,7 @@
 // Protocol, one command per line on stdin:
 //   D <mods> <key>   press and HOLD. mods is "-" or a comma list: ctrl,alt,shift,cmd
 //   U                release whatever is held
+//   T <mods> <key>   TAP a combo (press and release)
 //
 // On macOS a combo is ONE key event carrying modifier FLAGS — the modifier keys are not
 // pressed separately. Windows differs; see keyholder.cpp. That asymmetry is why the
@@ -87,7 +88,7 @@ while let line = readLine(strippingNewline: true) {
     case "U":
         Keyholder.releaseHeld()
 
-    case "D":
+    case "D", "T":
         guard parts.count == 3, let key = Keyholder.keys[String(parts[2]).lowercased()] else {
             FileHandle.standardError.write(Data("keyholder: bad command: \(line)\n".utf8))
             continue
@@ -100,6 +101,9 @@ while let line = readLine(strippingNewline: true) {
             }
         }
         Keyholder.press(key, flags)
+        if verb == "T" {
+            Keyholder.releaseHeld()
+        }
 
     default:
         continue

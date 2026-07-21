@@ -3,6 +3,7 @@
 // Protocol, one command per line on stdin:
 //   D <mods> <key>   press and HOLD. mods is "-" or a comma list: ctrl,alt,shift,cmd
 //   U                release whatever is held
+//   T <mods> <key>   TAP a combo (press and release)
 //
 // Unlike macOS (where a combo is one event carrying modifier flags), SendInput has no
 // flags field: the modifier keys must be physically pressed, then the key, and released
@@ -95,7 +96,7 @@ int main() {
       ReleaseHeld();
       continue;
     }
-    if (verb != "D") continue;
+    if (verb != "D" && verb != "T") continue;
 
     std::string mod_list, key_name;
     stream >> mod_list >> key_name;
@@ -117,6 +118,7 @@ int main() {
     }
 
     Press(mods, key->second);
+    if (verb == "T") ReleaseHeld();
   }
 
   // stdin closed — Stream Deck killed the plugin. Never leave a key down.

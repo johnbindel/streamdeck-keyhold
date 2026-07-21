@@ -14,6 +14,11 @@ const DEFAULTS = {
 	alt: true,
 	shift: false,
 	cmd: true,
+	releaseKey: "",
+	releaseCtrl: false,
+	releaseAlt: false,
+	releaseShift: false,
+	releaseCmd: false,
 };
 
 /**
@@ -38,22 +43,36 @@ function comboOf(settings) {
 	return { key: String(merged.key).toLowerCase(), mods };
 }
 
+function releaseComboOf(settings) {
+	const merged = { ...DEFAULTS, ...settings };
+	if (!merged.releaseKey) return null;
+
+	const mods = MODIFIERS.filter((m) => merged[`release${m[0].toUpperCase()}${m.slice(1)}`]);
+	return { key: String(merged.releaseKey).toLowerCase(), mods };
+}
+
+function command(verb, { key, mods }) {
+	return `${verb} ${mods.length ? mods.join(",") : "-"} ${key}`;
+}
+
 /**
  * Which action instances are currently holding. A pedal can be released while a
  * different profile is showing, so release is unconditional rather than re-derived from
  * settings that may have changed underneath us mid-hold.
  */
-const holding = new Set();
+const holding = new Map();
 
 streamDeck.actions.onKeyDown((ev) => {
-	const { key, mods } = comboOf(ev.payload.settings);
-	send(`D ${mods.length ? mods.join(",") : "-"} ${key}`);
-	holding.add(ev.action.id);
+	send(command("D", comboOf(ev.payload.settings)));
+	holding.set(ev.action.id, releaseComboOf(ev.payload.settings));
 });
 
 streamDeck.actions.onKeyUp((ev) => {
-	if (!holding.delete(ev.action.id)) return;
+	if (!holding.has(ev.action.id)) return;
+	const releaseCombo = holding.get(ev.action.id);
+	holding.delete(ev.action.id);
 	send("U");
+	if (releaseCombo) send(command("T", releaseCombo));
 });
 
 streamDeck.connect();
