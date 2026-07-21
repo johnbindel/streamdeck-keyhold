@@ -102,11 +102,12 @@
 		};
 		const IS_MAC = /Mac/.test(navigator.platform);
 		const MOD_LABELS = {
-			ctrl: "Ctrl", alt: IS_MAC ? "Option" : "Alt", shift: "Shift", cmd: IS_MAC ? "Cmd" : "Win",
-			lctrl: "Left Ctrl", rctrl: "Right Ctrl",
-			lalt: IS_MAC ? "Left Option" : "Left Alt", ralt: IS_MAC ? "Right Option" : "Right Alt",
-			lshift: "Left Shift", rshift: "Right Shift",
-			lcmd: IS_MAC ? "Left Cmd" : "Left Win", rcmd: IS_MAC ? "Right Cmd" : "Right Win",
+			ctrl: IS_MAC ? "⌃" : "Ctrl", alt: IS_MAC ? "⌥" : "Alt",
+			shift: IS_MAC ? "⇧" : "Shift", cmd: IS_MAC ? "⌘" : "Win",
+			lctrl: IS_MAC ? "⌃" : "Left Ctrl", rctrl: IS_MAC ? "⌃" : "Right Ctrl",
+			lalt: IS_MAC ? "⌥" : "Left Alt", ralt: IS_MAC ? "⌥" : "Right Alt",
+			lshift: IS_MAC ? "⇧" : "Left Shift", rshift: IS_MAC ? "⇧" : "Right Shift",
+			lcmd: IS_MAC ? "⌘" : "Left Win", rcmd: IS_MAC ? "⌘" : "Right Win",
 		};
 
 		let websocket, uuid, settings = {};
@@ -131,9 +132,9 @@
 		}
 
 		function displayCombo(combo) {
-			const parts = combo.mods.map((mod) => MOD_LABELS[mod]);
-			if (combo.key) parts.push(KEY_LABELS[combo.key] ?? combo.key.toUpperCase());
-			return parts.join(" + ");
+			const modifiers = combo.mods.map((mod) => MOD_LABELS[mod]);
+			const key = combo.key ? KEY_LABELS[combo.key] ?? combo.key.toUpperCase() : "";
+			return IS_MAC ? modifiers.join("") + key : [...modifiers, key].filter(Boolean).join(" + ");
 		}
 
 		function render() {
@@ -192,7 +193,8 @@
 			if (modifier) {
 				pressedModifiers.add(modifier);
 				draftModifiers.add(modifier);
-				RECORDERS[prefix].value = displayCombo({ key: "", mods: MODIFIER_TOKENS.filter((m) => draftModifiers.has(m)) }) + " + …";
+				const partial = displayCombo({ key: "", mods: MODIFIER_TOKENS.filter((m) => draftModifiers.has(m)) });
+				RECORDERS[prefix].value = partial + (IS_MAC ? "" : " + ") + "…";
 				return;
 			}
 
