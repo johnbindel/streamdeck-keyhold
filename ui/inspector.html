@@ -60,17 +60,23 @@
 		</div>
 	</div>
 	<div class="hint">
-		Click a field, then press a key combination. Modifier-only combinations are supported.
+		Click a field, then press a key combination. Ctrl, Alt/Option, Shift, and Cmd/Win
+		can be recorded by themselves.
 		The hold combination stays down while the button or pedal is pressed; the optional
 		release combination is tapped after you let go.
 	</div>
 
 	<script>
-		const MODIFIERS = ["ctrl", "alt", "shift", "cmd"];
+		const LEGACY_MODIFIERS = ["ctrl", "alt", "shift", "cmd"];
+		const MODIFIER_TOKENS = [
+			"ctrl", "alt", "shift", "cmd",
+			"lctrl", "rctrl", "lalt", "ralt", "lshift", "rshift", "lcmd", "rcmd",
+		];
 		const DEFAULTS = {
 			key: "t", ctrl: true, alt: true, cmd: true, shift: false,
+			modifiers: null,
 			releaseKey: "", releaseCtrl: false, releaseAlt: false,
-			releaseShift: false, releaseCmd: false,
+			releaseShift: false, releaseCmd: false, releaseModifiers: null,
 		};
 		const RECORDERS = {
 			hold: document.getElementById("holdRecorder"),
@@ -94,7 +100,14 @@
 			comma: ",", minus: "−", period: ".", slash: "/", backquote: "`",
 			leftbracket: "[", backslash: "\\", rightbracket: "]", quote: "'",
 		};
-		const MOD_LABELS = { ctrl: "Ctrl", alt: "Alt", shift: "Shift", cmd: "Cmd/Win" };
+		const IS_MAC = /Mac/.test(navigator.platform);
+		const MOD_LABELS = {
+			ctrl: "Ctrl", alt: IS_MAC ? "Option" : "Alt", shift: "Shift", cmd: IS_MAC ? "Cmd" : "Win",
+			lctrl: "Left Ctrl", rctrl: "Right Ctrl",
+			lalt: IS_MAC ? "Left Option" : "Left Alt", ralt: IS_MAC ? "Right Option" : "Right Alt",
+			lshift: "Left Shift", rshift: "Right Shift",
+			lcmd: IS_MAC ? "Left Cmd" : "Left Win", rcmd: IS_MAC ? "Right Cmd" : "Right Win",
+		};
 
 		let websocket, uuid, settings = {};
 		let recording = null;
@@ -108,9 +121,12 @@
 		}
 
 		function comboFromSettings(source, prefix) {
+			const savedModifiers = source[settingName(prefix, "modifiers")];
 			return {
 				key: source[settingName(prefix, "key")] ?? "",
-				mods: MODIFIERS.filter((mod) => source[settingName(prefix, mod)]),
+				mods: Array.isArray(savedModifiers)
+					? savedModifiers.filter((modifier) => MODIFIER_TOKENS.includes(modifier))
+					: LEGACY_MODIFIERS.filter((modifier) => source[settingName(prefix, modifier)]),
 			};
 		}
 
@@ -127,20 +143,22 @@
 		}
 
 		function saveCombo(prefix, combo) {
-			settings = { ...settings, [settingName(prefix, "key")]: combo.key };
-			for (const mod of MODIFIERS) {
-				settings[settingName(prefix, mod)] = combo.mods.includes(mod);
-			}
+			settings = {
+				...settings,
+				[settingName(prefix, "key")]: combo.key,
+				[settingName(prefix, "modifiers")]: combo.mods,
+			};
 			websocket.send(JSON.stringify({ event: "setSettings", context: uuid, payload: settings }));
 			render();
 		}
 
 		function modifierFromCode(code) {
-			if (code.startsWith("Control")) return "ctrl";
-			if (code.startsWith("Alt")) return "alt";
-			if (code.startsWith("Shift")) return "shift";
-			if (code.startsWith("Meta")) return "cmd";
-			return null;
+			return {
+				ControlLeft: "lctrl", ControlRight: "rctrl",
+				AltLeft: "lalt", AltRight: "ralt",
+				ShiftLeft: "lshift", ShiftRight: "rshift",
+				MetaLeft: "lcmd", MetaRight: "rcmd",
+			}[code] ?? null;
 		}
 
 		function keyFromCode(code) {
@@ -158,7 +176,7 @@
 		}
 
 		function finishRecording(prefix, key = "") {
-			const combo = { key, mods: MODIFIERS.filter((mod) => draftModifiers.has(mod)) };
+			const combo = { key, mods: MODIFIER_TOKENS.filter((mod) => draftModifiers.has(mod)) };
 			recording = null;
 			pressedModifiers.clear();
 			draftModifiers.clear();
@@ -174,14 +192,14 @@
 			if (modifier) {
 				pressedModifiers.add(modifier);
 				draftModifiers.add(modifier);
-				RECORDERS[prefix].value = displayCombo({ key: "", mods: MODIFIERS.filter((m) => draftModifiers.has(m)) }) + " + …";
+				RECORDERS[prefix].value = displayCombo({ key: "", mods: MODIFIER_TOKENS.filter((m) => draftModifiers.has(m)) }) + " + …";
 				return;
 			}
 
-			if (event.ctrlKey) draftModifiers.add("ctrl");
-			if (event.altKey) draftModifiers.add("alt");
-			if (event.shiftKey) draftModifiers.add("shift");
-			if (event.metaKey) draftModifiers.add("cmd");
+			if (event.ctrlKey && !draftModifiers.has("lctrl") && !draftModifiers.has("rctrl")) draftModifiers.add("ctrl");
+			if (event.altKey && !draftModifiers.has("lalt") && !draftModifiers.has("ralt")) draftModifiers.add("alt");
+			if (event.shiftKey && !draftModifiers.has("lshift") && !draftModifiers.has("rshift")) draftModifiers.add("shift");
+			if (event.metaKey && !draftModifiers.has("lcmd") && !draftModifiers.has("rcmd")) draftModifiers.add("cmd");
 			const key = keyFromCode(event.code);
 			if (key) finishRecording(prefix, key);
 			else RECORDERS[prefix].value = "Unsupported key — try another";

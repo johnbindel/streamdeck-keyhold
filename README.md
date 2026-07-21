@@ -30,9 +30,11 @@ modifier support. As far as I can tell, this is the first macOS implementation.
 
 ## Modifier-only shortcuts
 
-The recorder accepts regular keys, key combinations, and modifier-only shortcuts such as
-Option or Ctrl+Shift. There is an important limitation outside the plugin: some apps reject
-synthetic modifier-only events even though they accept synthetic regular keys.
+The recorder accepts regular keys, key combinations, and modifier-only shortcuts made from
+Ctrl, Alt/Option, Shift, and Cmd/Win. It preserves the left or right modifier you record.
+Fn/Globe is not exposed to the property inspector as a recordable key. There is also an
+important limitation outside the plugin: some apps reject synthetic modifier-only events
+even though they accept synthetic regular keys.
 
 Many dictation apps default their push-to-talk to a bare modifier. Apps that watch bare
 modifiers may read them below the CGEvent layer, where they can tell injected events from
@@ -91,9 +93,9 @@ Stream Deck key/pedal
 ```
 
 The helper is a long-lived process reading one command per line on stdin. It owns the combo
-semantics because they differ per platform: **macOS** sends one key event carrying modifier
-*flags*, while **Windows** has no flags field in `SendInput` and must physically press each
-modifier key, then the key, then release them in reverse.
+semantics because they differ per platform. **macOS** posts modifier `flagsChanged` events
+and carries the accumulated flags on the regular key event. **Windows** uses `SendInput` to
+press each modifier, then the key, then release them in reverse.
 
 On macOS the events are built on a `hidSystemState` source and posted to the `cghidEventTap`
 — the lowest injection point CoreGraphics exposes.

@@ -6,7 +6,11 @@ import streamDeck from "@elgato/streamdeck";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const HELPER = join(HERE, process.platform === "win32" ? "keyholder.exe" : "keyholder");
 
-const MODIFIERS = ["ctrl", "alt", "shift", "cmd"];
+const LEGACY_MODIFIERS = ["ctrl", "alt", "shift", "cmd"];
+const MODIFIER_TOKENS = [
+	"ctrl", "alt", "shift", "cmd",
+	"lctrl", "rctrl", "lalt", "ralt", "lshift", "rshift", "lcmd", "rcmd",
+];
 
 const DEFAULTS = {
 	key: "t",
@@ -14,11 +18,13 @@ const DEFAULTS = {
 	alt: true,
 	shift: false,
 	cmd: true,
+	modifiers: null,
 	releaseKey: "",
 	releaseCtrl: false,
 	releaseAlt: false,
 	releaseShift: false,
 	releaseCmd: false,
+	releaseModifiers: null,
 };
 
 /**
@@ -43,7 +49,10 @@ function comboOf(settings, prefix = "") {
 		? `${prefix}${name[0].toUpperCase()}${name.slice(1)}`
 		: name;
 	const key = String(merged[settingName("key")] ?? "").toLowerCase();
-	const mods = MODIFIERS.filter((m) => merged[settingName(m)]);
+	const savedModifiers = merged[settingName("modifiers")];
+	const mods = Array.isArray(savedModifiers)
+		? savedModifiers.filter((modifier) => MODIFIER_TOKENS.includes(modifier))
+		: LEGACY_MODIFIERS.filter((modifier) => merged[settingName(modifier)]);
 	return key || mods.length ? { key, mods } : null;
 }
 

@@ -5,9 +5,8 @@
 //   U                release whatever is held
 //   T <mods> <key>   TAP a combo (press and release). mods is a comma list.
 //
-// On macOS a combo is ONE key event carrying modifier FLAGS — the modifier keys are not
-// pressed separately. Windows differs; see keyholder.cpp. That asymmetry is why the
-// helper owns combo semantics rather than the plugin.
+// Modifier events are posted separately so left/right identity is preserved. The regular
+// key event also carries the accumulated modifier flags.
 //
 // Events are built on a .hidSystemState source and posted to .cghidEventTap, the lowest
 // injection point CoreGraphics exposes.
@@ -43,20 +42,16 @@ enum Keyholder {
         "f20": 90,
     ]
 
-    static let mods: [String: CGEventFlags] = [
-        "ctrl": .maskControl,
-        "alt": .maskAlternate,
-        "shift": .maskShift,
-        "cmd": .maskCommand,
+    static let modifierKeys: [String: (CGKeyCode, CGEventFlags)] = [
+        "ctrl": (59, .maskControl), "lctrl": (59, .maskControl), "rctrl": (62, .maskControl),
+        "alt": (58, .maskAlternate), "lalt": (58, .maskAlternate), "ralt": (61, .maskAlternate),
+        "shift": (56, .maskShift), "lshift": (56, .maskShift), "rshift": (60, .maskShift),
+        "cmd": (55, .maskCommand), "lcmd": (55, .maskCommand), "rcmd": (54, .maskCommand),
     ]
 
     /// What we are currently holding, so we can always release it — even if the plugin
     /// dies mid-hold. A stuck key is the worst failure here: it would make the machine
     /// unusable until logout.
-    static let modifierKeys: [(CGKeyCode, CGEventFlags)] = [
-        (59, .maskControl), (58, .maskAlternate), (56, .maskShift), (55, .maskCommand),
-    ]
-
     static var held: CGKeyCode?
     static var heldModifiers: [(CGKeyCode, CGEventFlags)] = []
 
@@ -75,37 +70,36 @@ enum Keyholder {
         event.post(tap: .cghidEventTap)
     }
 
-    static func press(_ key: CGKeyCode?, _ flags: CGEventFlags) {
+    static func press(_ key: CGKeyCode?, _ modifiers: [(CGKeyCode, CGEventFlags)]) {
         releaseHeld()
-        if let key {
-            post(key, flags, down: true)
-            held = key
-            return
-        }
-
         var currentFlags: CGEventFlags = []
-        for (modifierKey, flag) in modifierKeys where flags.contains(flag) {
+        for (modifierKey, flag) in modifiers {
             currentFlags.insert(flag)
             postModifier(modifierKey, currentFlags)
             heldModifiers.append((modifierKey, flag))
         }
+        if let key {
+            post(key, currentFlags, down: true)
+            held = key
+        }
     }
 
     static func releaseHeld() {
-        if let key = held {
-            post(key, [], down: false)
-            held = nil
-        }
-
         var currentFlags: CGEventFlags = []
         for (_, flag) in heldModifiers {
             currentFlags.insert(flag)
         }
-        for (modifierKey, flag) in heldModifiers.reversed() {
-            currentFlags.remove(flag)
+        if let key = held {
+            post(key, currentFlags, down: false)
+            held = nil
+        }
+        while let (modifierKey, _) = heldModifiers.popLast() {
+            currentFlags = []
+            for (_, remainingFlag) in heldModifiers {
+                currentFlags.insert(remainingFlag)
+            }
             postModifier(modifierKey, currentFlags)
         }
-        heldModifiers.removeAll()
     }
 }
 
@@ -144,15 +138,15 @@ while let line = readLine(strippingNewline: true) {
             FileHandle.standardError.write(Data("keyholder: bad command: \(line)\n".utf8))
             continue
         }
-        var flags: CGEventFlags = []
+        var modifiers: [(CGKeyCode, CGEventFlags)] = []
         if parts[1] != "-" {
             for name in parts[1].split(separator: ",") {
-                guard let flag = Keyholder.mods[String(name).lowercased()] else { continue }
-                flags.insert(flag)
+                guard let modifier = Keyholder.modifierKeys[String(name).lowercased()] else { continue }
+                modifiers.append(modifier)
             }
         }
-        guard key != nil || !flags.isEmpty else { continue }
-        Keyholder.press(key, flags)
+        guard key != nil || !modifiers.isEmpty else { continue }
+        Keyholder.press(key, modifiers)
         if verb == "T" {
             Keyholder.releaseHeld()
         }

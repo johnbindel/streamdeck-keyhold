@@ -51,6 +51,10 @@ const std::map<std::string, WORD> kMods = {
     {"alt", VK_MENU},
     {"shift", VK_SHIFT},
     {"cmd", VK_LWIN},
+    {"lctrl", VK_LCONTROL}, {"rctrl", VK_RCONTROL},
+    {"lalt", VK_LMENU}, {"ralt", VK_RMENU},
+    {"lshift", VK_LSHIFT}, {"rshift", VK_RSHIFT},
+    {"lcmd", VK_LWIN}, {"rcmd", VK_RWIN},
 };
 
 // What is currently held, in press order, so we can always release it — even if the
