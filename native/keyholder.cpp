@@ -61,11 +61,34 @@ const std::map<std::string, WORD> kMods = {
 // plugin dies mid-hold. A stuck key is the worst failure here.
 std::vector<WORD> g_held;
 
+bool IsExtendedKey(WORD vk) {
+  switch (vk) {
+    case VK_RCONTROL:
+    case VK_RMENU:
+    case VK_LWIN:
+    case VK_RWIN:
+    case VK_INSERT:
+    case VK_DELETE:
+    case VK_HOME:
+    case VK_END:
+    case VK_PRIOR:
+    case VK_NEXT:
+    case VK_LEFT:
+    case VK_RIGHT:
+    case VK_UP:
+    case VK_DOWN:
+      return true;
+    default:
+      return false;
+  }
+}
+
 void SendKey(WORD vk, bool down) {
   INPUT input = {};
   input.type = INPUT_KEYBOARD;
   input.ki.wVk = vk;
-  input.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
+  input.ki.dwFlags = (down ? 0 : KEYEVENTF_KEYUP) |
+                     (IsExtendedKey(vk) ? KEYEVENTF_EXTENDEDKEY : 0);
   SendInput(1, &input, sizeof(INPUT));
 }
 
