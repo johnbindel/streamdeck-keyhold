@@ -37,22 +37,18 @@ function send(line) {
 	helper.stdin.write(`${line}\n`);
 }
 
-function comboOf(settings) {
+function comboOf(settings, prefix = "") {
 	const merged = { ...DEFAULTS, ...settings };
-	const mods = MODIFIERS.filter((m) => merged[m]);
-	return { key: String(merged.key).toLowerCase(), mods };
-}
-
-function releaseComboOf(settings) {
-	const merged = { ...DEFAULTS, ...settings };
-	if (!merged.releaseKey) return null;
-
-	const mods = MODIFIERS.filter((m) => merged[`release${m[0].toUpperCase()}${m.slice(1)}`]);
-	return { key: String(merged.releaseKey).toLowerCase(), mods };
+	const settingName = (name) => prefix
+		? `${prefix}${name[0].toUpperCase()}${name.slice(1)}`
+		: name;
+	const key = String(merged[settingName("key")] ?? "").toLowerCase();
+	const mods = MODIFIERS.filter((m) => merged[settingName(m)]);
+	return key || mods.length ? { key, mods } : null;
 }
 
 function command(verb, { key, mods }) {
-	return `${verb} ${mods.length ? mods.join(",") : "-"} ${key}`;
+	return `${verb} ${mods.length ? mods.join(",") : "-"} ${key || "-"}`;
 }
 
 /**
@@ -63,15 +59,19 @@ function command(verb, { key, mods }) {
 const holding = new Map();
 
 streamDeck.actions.onKeyDown((ev) => {
-	send(command("D", comboOf(ev.payload.settings)));
-	holding.set(ev.action.id, releaseComboOf(ev.payload.settings));
+	const heldCombo = comboOf(ev.payload.settings);
+	if (heldCombo) send(command("D", heldCombo));
+	holding.set(ev.action.id, {
+		held: !!heldCombo,
+		releaseCombo: comboOf(ev.payload.settings, "release"),
+	});
 });
 
 streamDeck.actions.onKeyUp((ev) => {
 	if (!holding.has(ev.action.id)) return;
-	const releaseCombo = holding.get(ev.action.id);
+	const { held, releaseCombo } = holding.get(ev.action.id);
 	holding.delete(ev.action.id);
-	send("U");
+	if (held) send("U");
 	if (releaseCombo) send(command("T", releaseCombo));
 });
 

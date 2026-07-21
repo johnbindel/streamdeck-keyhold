@@ -28,19 +28,17 @@ There is one other open-source plugin using this seam,
 [voji/hotkeyhold_sd](https://github.com/voji/sendkey_sd) — but it's Windows-only and has no
 modifier support. As far as I can tell, this is the first macOS implementation.
 
-## The important finding: use a regular key, not a bare modifier
+## Modifier-only shortcuts
 
-**Do not configure this to hold a bare modifier (just Option, just Ctrl).** It will not work,
-and this is not a bug in the plugin.
+The recorder accepts regular keys, key combinations, and modifier-only shortcuts such as
+Option or Ctrl+Shift. There is an important limitation outside the plugin: some apps reject
+synthetic modifier-only events even though they accept synthetic regular keys.
 
-Many dictation apps default their push-to-talk to a bare modifier — Spokenly uses Right
-Option, Wispr Flow uses Fn. I tested holding a synthetic Right Option on macOS and confirmed
-the injected event was **byte-identical to a real keypress** at the event-tap layer (same
-keycode 61, same `alt` flag, correct `flagsChanged` type). Spokenly still ignored it.
+Many dictation apps default their push-to-talk to a bare modifier. Apps that watch bare
+modifiers may read them below the CGEvent layer, where they can tell injected events from
+real hardware and deliberately reject the injected ones.
 
-Apps that watch bare modifiers read them below the CGEvent layer, where they can tell
-injected events from real hardware — and they deliberately reject the injected ones. No
-Stream Deck plugin can defeat this. Neither can BetterTouchTool, Keyboard Maestro,
+No Stream Deck plugin can defeat that filtering. Neither can BetterTouchTool, Keyboard Maestro,
 Hammerspoon, or anything else that injects at that layer. (Karabiner-Elements *can*, because
 it installs a virtual HID device at the driver level — but Karabiner can only remap real HID
 devices, and the Stream Deck Pedal isn't one.)
@@ -49,18 +47,17 @@ The same apps accept a synthetic **regular key held down** without complaint, be
 ordinary hotkeys go through a different code path that doesn't do hardware-vs-synthetic
 filtering.
 
-**So:** set your dictation app's push-to-talk shortcut to a regular key plus modifiers —
-`Ctrl+Alt+Cmd+T`, or an F13–F19 key (macOS ignores those entirely, so they collide with
-nothing) — and set this plugin to the same combo. That works, and it's the plugin's default.
+If a modifier-only shortcut is ignored, set the target app's shortcut to a regular key plus
+modifiers — `Ctrl+Alt+Cmd+T`, or an F13–F19 key — and record the same combination here.
 
 ## Install
 
 Download the `.streamDeckPlugin` file from
 [Releases](https://github.com/johnbindel/streamdeck-keyhold/releases) and double-click it.
 
-Then drag **Hold Key** onto a key or pedal, pick your combo in the property inspector, and
-set your dictation app's push-to-talk shortcut to match. If the target app needs a separate
-shortcut after push-to-talk ends, choose it under **On release (optional)**.
+Then drag **Hold Key** onto a key or pedal. Click the **Hold** field and press the desired
+combination. Do the same in **Release** if the target app needs a separate shortcut after
+push-to-talk ends. Use the × button beside either field to clear it.
 
 On macOS, Stream Deck needs Accessibility permission to send keystrokes at all
 (System Settings → Privacy & Security → Accessibility). If your existing Hotkey actions work,
