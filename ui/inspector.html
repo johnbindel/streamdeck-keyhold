@@ -12,7 +12,7 @@
 			padding: 12px;
 		}
 		.row { display: flex; align-items: center; margin-bottom: 12px; }
-		.label { width: 60px; text-align: right; padding-right: 8px; color: #9a9a9a; }
+		.label { width: 96px; text-align: right; padding-right: 8px; color: #9a9a9a; }
 		.recorder { display: flex; flex: 1; gap: 5px; }
 		.recorder input {
 			min-width: 0;
@@ -53,17 +53,25 @@
 		</div>
 	</div>
 	<div class="row">
-		<div class="label">Release</div>
+		<div class="label">Before release</div>
 		<div class="recorder">
-			<input id="releaseRecorder" readonly placeholder="None (optional)" aria-label="Release key combination" />
-			<button id="clearRelease" title="Clear release combination" aria-label="Clear release combination">×</button>
+			<input id="preReleaseRecorder" readonly placeholder="None (optional)" aria-label="Combination tapped before release" />
+			<button id="clearPreRelease" title="Clear before-release combination" aria-label="Clear before-release combination">×</button>
+		</div>
+	</div>
+	<div class="row">
+		<div class="label">After release</div>
+		<div class="recorder">
+			<input id="releaseRecorder" readonly placeholder="None (optional)" aria-label="Combination tapped after release" />
+			<button id="clearRelease" title="Clear after-release combination" aria-label="Clear after-release combination">×</button>
 		</div>
 	</div>
 	<div class="hint">
 		Click a field, then press a key combination. Ctrl, Alt/Option, Shift, and Cmd/Win
 		can be recorded by themselves.
-		The hold combination stays down while the button or pedal is pressed; the optional
-		release combination is tapped after you let go.
+		The hold combination stays down while the button or pedal is pressed. When you let go,
+		<b>Before release</b> is tapped while the hold is still down, then the hold is released,
+		then <b>After release</b> is tapped. Use either, both, or neither.
 	</div>
 
 	<script>
@@ -75,15 +83,18 @@
 		const DEFAULTS = {
 			key: "t", ctrl: true, alt: true, cmd: true, shift: false,
 			modifiers: null,
+			preReleaseKey: "", preReleaseModifiers: null,
 			releaseKey: "", releaseCtrl: false, releaseAlt: false,
 			releaseShift: false, releaseCmd: false, releaseModifiers: null,
 		};
+		const PREFIXES = ["hold", "preRelease", "release"];
 		const RECORDERS = {
 			hold: document.getElementById("holdRecorder"),
+			preRelease: document.getElementById("preReleaseRecorder"),
 			release: document.getElementById("releaseRecorder"),
 		};
 		const KEY_CODES = {
-			Enter: "enter", NumpadEnter: "enter", Space: "space", Tab: "tab",
+			Enter: "enter", NumpadEnter: "numpadenter", Space: "space", Tab: "tab",
 			Escape: "escape", Backspace: "backspace", Delete: "delete", Insert: "insert",
 			Home: "home", End: "end", PageUp: "pageup", PageDown: "pagedown",
 			ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down",
@@ -92,15 +103,24 @@
 			BracketLeft: "leftbracket", Backslash: "backslash",
 			BracketRight: "rightbracket", Quote: "quote",
 		};
+		const IS_MAC = /Mac/.test(navigator.platform);
+		// Apple's own key legend, as printed in macOS menus. Insert has no glyph because
+		// Apple keyboards have no Insert key. Return is ↩ (U+21A9); ⏎ and ↵ are the
+		// typographic return symbols Apple does not use.
+		const MAC_KEY_LABELS = {
+			enter: "↩", numpadenter: "⌤", space: "␣", tab: "⇥", escape: "⎋",
+			backspace: "⌫", delete: "⌦",
+			home: "↖", end: "↘", pageup: "⇞", pagedown: "⇟",
+		};
 		const KEY_LABELS = {
-			enter: "Enter", space: "Space", tab: "Tab", escape: "Esc",
+			enter: "Enter", numpadenter: "Num Enter", space: "Space", tab: "Tab", escape: "Esc",
 			backspace: "Backspace", delete: "Delete", insert: "Insert",
 			home: "Home", end: "End", pageup: "Page Up", pagedown: "Page Down",
 			left: "←", right: "→", up: "↑", down: "↓", semicolon: ";", equal: "=",
 			comma: ",", minus: "−", period: ".", slash: "/", backquote: "`",
 			leftbracket: "[", backslash: "\\", rightbracket: "]", quote: "'",
+			...(IS_MAC ? MAC_KEY_LABELS : {}),
 		};
-		const IS_MAC = /Mac/.test(navigator.platform);
 		const MOD_LABELS = {
 			ctrl: IS_MAC ? "⌃" : "Ctrl", alt: IS_MAC ? "⌥" : "Alt",
 			shift: IS_MAC ? "⇧" : "Shift", cmd: IS_MAC ? "⌘" : "Win",
@@ -116,9 +136,9 @@
 		let draftModifiers = new Set();
 
 		function settingName(prefix, name) {
-			return prefix === "release"
-				? "release" + name[0].toUpperCase() + name.slice(1)
-				: name;
+			return prefix === "hold"
+				? name
+				: prefix + name[0].toUpperCase() + name.slice(1);
 		}
 
 		function comboFromSettings(source, prefix) {
@@ -139,8 +159,9 @@
 
 		function render() {
 			const source = { ...DEFAULTS, ...settings };
-			RECORDERS.hold.value = displayCombo(comboFromSettings(source, "hold"));
-			RECORDERS.release.value = displayCombo(comboFromSettings(source, "release"));
+			for (const prefix of PREFIXES) {
+				RECORDERS[prefix].value = displayCombo(comboFromSettings(source, prefix));
+			}
 		}
 
 		function saveCombo(prefix, combo) {
@@ -217,7 +238,7 @@
 			if (pressedModifiers.size === 0 && draftModifiers.size > 0) finishRecording(prefix);
 		}
 
-		for (const prefix of ["hold", "release"]) {
+		for (const prefix of PREFIXES) {
 			const recorder = RECORDERS[prefix];
 			recorder.addEventListener("focus", () => startRecording(prefix));
 			recorder.addEventListener("click", () => startRecording(prefix));
@@ -231,8 +252,11 @@
 			});
 		}
 
-		document.getElementById("clearHold").addEventListener("click", () => saveCombo("hold", { key: "", mods: [] }));
-		document.getElementById("clearRelease").addEventListener("click", () => saveCombo("release", { key: "", mods: [] }));
+		const CLEAR_BUTTONS = { hold: "clearHold", preRelease: "clearPreRelease", release: "clearRelease" };
+		for (const prefix of PREFIXES) {
+			document.getElementById(CLEAR_BUTTONS[prefix])
+				.addEventListener("click", () => saveCombo(prefix, { key: "", mods: [] }));
+		}
 
 		function connectElgatoStreamDeckSocket(port, propertyInspectorUUID, registerEvent, info, actionInfo) {
 			uuid = propertyInspectorUUID;
