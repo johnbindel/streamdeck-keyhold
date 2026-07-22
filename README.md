@@ -5,8 +5,9 @@ immediately. That makes push-to-talk impossible: a dictation app waiting for you
 a hotkey sees a tap and stops listening instantly.
 
 This plugin holds the hotkey for exactly as long as you hold the Stream Deck key or pedal,
-and releases it when you let go. It exists mainly for **push-to-talk dictation on macOS**,
-where nothing else did the job.
+and releases it when you let go. You can also configure an optional second hotkey that is
+tapped when you let go. It exists mainly for **push-to-talk dictation on macOS**, where
+nothing else did the job.
 
 Works with Stream Deck keys, the Stream Deck Pedal, and any other Stream Deck surface.
 
@@ -27,19 +28,19 @@ There is one other open-source plugin using this seam,
 [voji/hotkeyhold_sd](https://github.com/voji/sendkey_sd) — but it's Windows-only and has no
 modifier support. As far as I can tell, this is the first macOS implementation.
 
-## The important finding: use a regular key, not a bare modifier
+## Modifier-only shortcuts
 
-**Do not configure this to hold a bare modifier (just Option, just Ctrl).** It will not work,
-and this is not a bug in the plugin.
+The recorder accepts regular keys, key combinations, and modifier-only shortcuts made from
+Ctrl, Alt/Option, Shift, and Cmd/Win. It preserves the left or right modifier you record.
+Fn/Globe is not exposed to the property inspector as a recordable key. There is also an
+important limitation outside the plugin: some apps reject synthetic modifier-only events
+even though they accept synthetic regular keys.
 
-Many dictation apps default their push-to-talk to a bare modifier — Spokenly uses Right
-Option, Wispr Flow uses Fn. I tested holding a synthetic Right Option on macOS and confirmed
-the injected event was **byte-identical to a real keypress** at the event-tap layer (same
-keycode 61, same `alt` flag, correct `flagsChanged` type). Spokenly still ignored it.
+Many dictation apps default their push-to-talk to a bare modifier. Apps that watch bare
+modifiers may read them below the CGEvent layer, where they can tell injected events from
+real hardware and deliberately reject the injected ones.
 
-Apps that watch bare modifiers read them below the CGEvent layer, where they can tell
-injected events from real hardware — and they deliberately reject the injected ones. No
-Stream Deck plugin can defeat this. Neither can BetterTouchTool, Keyboard Maestro,
+No Stream Deck plugin can defeat that filtering. Neither can BetterTouchTool, Keyboard Maestro,
 Hammerspoon, or anything else that injects at that layer. (Karabiner-Elements *can*, because
 it installs a virtual HID device at the driver level — but Karabiner can only remap real HID
 devices, and the Stream Deck Pedal isn't one.)
@@ -48,17 +49,17 @@ The same apps accept a synthetic **regular key held down** without complaint, be
 ordinary hotkeys go through a different code path that doesn't do hardware-vs-synthetic
 filtering.
 
-**So:** set your dictation app's push-to-talk shortcut to a regular key plus modifiers —
-`Ctrl+Alt+Cmd+T`, or an F13–F19 key (macOS ignores those entirely, so they collide with
-nothing) — and set this plugin to the same combo. That works, and it's the plugin's default.
+If a modifier-only shortcut is ignored, set the target app's shortcut to a regular key plus
+modifiers — `Ctrl+Alt+Cmd+T`, or an F13–F19 key — and record the same combination here.
 
 ## Install
 
 Download the `.streamDeckPlugin` file from
 [Releases](https://github.com/johnbindel/streamdeck-keyhold/releases) and double-click it.
 
-Then drag **Hold Key** onto a key or pedal, pick your combo in the property inspector, and
-set your dictation app's push-to-talk shortcut to match.
+Then drag **Hold Key** onto a key or pedal. Click the **Hold** field and press the desired
+combination. Do the same in **Release** if the target app needs a separate shortcut after
+push-to-talk ends. Use the × button beside either field to clear it.
 
 On macOS, Stream Deck needs Accessibility permission to send keystrokes at all
 (System Settings → Privacy & Security → Accessibility). If your existing Hotkey actions work,
@@ -87,14 +88,14 @@ Two things in the build are load-bearing and non-obvious:
 ```
 Stream Deck key/pedal
   → plugin.js          onKeyDown → "D ctrl,alt,cmd t"      (Node, via the Elgato SDK)
-                       onKeyUp   → "U"
+                       onKeyUp   → "U", then optional "T - f13"
   → keyholder          holds the combo until told to release  (Swift on macOS, C++ on Windows)
 ```
 
 The helper is a long-lived process reading one command per line on stdin. It owns the combo
-semantics because they differ per platform: **macOS** sends one key event carrying modifier
-*flags*, while **Windows** has no flags field in `SendInput` and must physically press each
-modifier key, then the key, then release them in reverse.
+semantics because they differ per platform. **macOS** posts modifier `flagsChanged` events
+and carries the accumulated flags on the regular key event. **Windows** uses `SendInput` to
+press each modifier, then the key, then release them in reverse.
 
 On macOS the events are built on a `hidSystemState` source and posted to the `cghidEventTap`
 — the lowest injection point CoreGraphics exposes.

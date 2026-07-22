@@ -11,75 +11,228 @@
 			margin: 0;
 			padding: 12px;
 		}
-		.row { display: flex; align-items: center; margin-bottom: 10px; }
-		.label { width: 84px; text-align: right; padding-right: 8px; color: #9a9a9a; }
-		select { flex: 1; background: #3d3d3d; color: #d8d8d8; border: none; border-radius: 4px; padding: 4px; }
-		.mods { display: flex; gap: 12px; flex: 1; }
-		.mods label { display: flex; align-items: center; gap: 4px; }
-		.hint { color: #7a7a7a; margin-top: 12px; line-height: 1.5; border-top: 1px solid #3d3d3d; padding-top: 10px; }
+		.row { display: flex; align-items: center; margin-bottom: 12px; }
+		.label { width: 60px; text-align: right; padding-right: 8px; color: #9a9a9a; }
+		.recorder { display: flex; flex: 1; gap: 5px; }
+		.recorder input {
+			min-width: 0;
+			flex: 1;
+			background: #3d3d3d;
+			color: #d8d8d8;
+			border: 1px solid transparent;
+			border-radius: 4px;
+			padding: 6px 8px;
+			outline: none;
+			cursor: pointer;
+		}
+		.recorder input:focus { border-color: #0088cc; }
+		.recorder button {
+			width: 27px;
+			border: none;
+			border-radius: 4px;
+			background: #454545;
+			color: #bbb;
+			cursor: pointer;
+		}
+		.recorder button:hover { background: #555; color: #fff; }
+		.hint {
+			color: #7a7a7a;
+			margin-top: 12px;
+			line-height: 1.5;
+			border-top: 1px solid #3d3d3d;
+			padding-top: 10px;
+		}
 	</style>
 </head>
 <body>
 	<div class="row">
-		<div class="label">Key</div>
-		<select id="key"></select>
+		<div class="label">Hold</div>
+		<div class="recorder">
+			<input id="holdRecorder" readonly placeholder="Click to record" aria-label="Hold key combination" />
+			<button id="clearHold" title="Clear hold combination" aria-label="Clear hold combination">×</button>
+		</div>
 	</div>
 	<div class="row">
-		<div class="label">Modifiers</div>
-		<div class="mods">
-			<label><input type="checkbox" id="ctrl" /> ⌃</label>
-			<label><input type="checkbox" id="alt" /> ⌥</label>
-			<label><input type="checkbox" id="shift" /> ⇧</label>
-			<label><input type="checkbox" id="cmd" /> ⌘ / Win</label>
+		<div class="label">Release</div>
+		<div class="recorder">
+			<input id="releaseRecorder" readonly placeholder="None (optional)" aria-label="Release key combination" />
+			<button id="clearRelease" title="Clear release combination" aria-label="Clear release combination">×</button>
 		</div>
 	</div>
 	<div class="hint">
-		Held down while the key or pedal is held, released on release.
-		<br /><br />
-		Set your dictation app to <b>push-to-talk</b> on this same combo. A bare modifier
-		with no key will not work — apps that watch modifiers can tell a synthetic one from
-		a real keypress and ignore it.
+		Click a field, then press a key combination. Ctrl, Alt/Option, Shift, and Cmd/Win
+		can be recorded by themselves.
+		The hold combination stays down while the button or pedal is pressed; the optional
+		release combination is tapped after you let go.
 	</div>
 
 	<script>
-		const KEYS = [
-			"t", "f13", "f14", "f15", "f16", "f17", "f18", "f19", "space",
-			"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
-			"n", "o", "p", "q", "r", "s", "u", "v", "w", "x", "y", "z",
+		const LEGACY_MODIFIERS = ["ctrl", "alt", "shift", "cmd"];
+		const MODIFIER_TOKENS = [
+			"ctrl", "alt", "shift", "cmd",
+			"lctrl", "rctrl", "lalt", "ralt", "lshift", "rshift", "lcmd", "rcmd",
 		];
-		const MODS = ["ctrl", "alt", "shift", "cmd"];
-		const DEFAULTS = { key: "t", ctrl: true, alt: true, cmd: true, shift: false };
-
-		const keyEl = document.getElementById("key");
-		for (const k of KEYS) {
-			const opt = document.createElement("option");
-			opt.value = k;
-			opt.textContent = k.toUpperCase();
-			keyEl.appendChild(opt);
-		}
+		const DEFAULTS = {
+			key: "t", ctrl: true, alt: true, cmd: true, shift: false,
+			modifiers: null,
+			releaseKey: "", releaseCtrl: false, releaseAlt: false,
+			releaseShift: false, releaseCmd: false, releaseModifiers: null,
+		};
+		const RECORDERS = {
+			hold: document.getElementById("holdRecorder"),
+			release: document.getElementById("releaseRecorder"),
+		};
+		const KEY_CODES = {
+			Enter: "enter", NumpadEnter: "enter", Space: "space", Tab: "tab",
+			Escape: "escape", Backspace: "backspace", Delete: "delete", Insert: "insert",
+			Home: "home", End: "end", PageUp: "pageup", PageDown: "pagedown",
+			ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down",
+			Semicolon: "semicolon", Equal: "equal", Comma: "comma", Minus: "minus",
+			Period: "period", Slash: "slash", Backquote: "backquote",
+			BracketLeft: "leftbracket", Backslash: "backslash",
+			BracketRight: "rightbracket", Quote: "quote",
+		};
+		const KEY_LABELS = {
+			enter: "Enter", space: "Space", tab: "Tab", escape: "Esc",
+			backspace: "Backspace", delete: "Delete", insert: "Insert",
+			home: "Home", end: "End", pageup: "Page Up", pagedown: "Page Down",
+			left: "←", right: "→", up: "↑", down: "↓", semicolon: ";", equal: "=",
+			comma: ",", minus: "−", period: ".", slash: "/", backquote: "`",
+			leftbracket: "[", backslash: "\\", rightbracket: "]", quote: "'",
+		};
+		const IS_MAC = /Mac/.test(navigator.platform);
+		const MOD_LABELS = {
+			ctrl: IS_MAC ? "⌃" : "Ctrl", alt: IS_MAC ? "⌥" : "Alt",
+			shift: IS_MAC ? "⇧" : "Shift", cmd: IS_MAC ? "⌘" : "Win",
+			lctrl: IS_MAC ? "⌃" : "Left Ctrl", rctrl: IS_MAC ? "⌃" : "Right Ctrl",
+			lalt: IS_MAC ? "⌥" : "Left Alt", ralt: IS_MAC ? "⌥" : "Right Alt",
+			lshift: IS_MAC ? "⇧" : "Left Shift", rshift: IS_MAC ? "⇧" : "Right Shift",
+			lcmd: IS_MAC ? "⌘" : "Left Win", rcmd: IS_MAC ? "⌘" : "Right Win",
+		};
 
 		let websocket, uuid, settings = {};
+		let recording = null;
+		let pressedModifiers = new Set();
+		let draftModifiers = new Set();
 
-		function save() {
-			settings = {
-				key: keyEl.value,
-				...Object.fromEntries(MODS.map((m) => [m, document.getElementById(m).checked])),
+		function settingName(prefix, name) {
+			return prefix === "release"
+				? "release" + name[0].toUpperCase() + name.slice(1)
+				: name;
+		}
+
+		function comboFromSettings(source, prefix) {
+			const savedModifiers = source[settingName(prefix, "modifiers")];
+			return {
+				key: source[settingName(prefix, "key")] ?? "",
+				mods: Array.isArray(savedModifiers)
+					? savedModifiers.filter((modifier) => MODIFIER_TOKENS.includes(modifier))
+					: LEGACY_MODIFIERS.filter((modifier) => source[settingName(prefix, modifier)]),
 			};
-			websocket.send(JSON.stringify({
-				event: "setSettings",
-				context: uuid,
-				payload: settings,
-			}));
+		}
+
+		function displayCombo(combo) {
+			const modifiers = combo.mods.map((mod) => MOD_LABELS[mod]);
+			const key = combo.key ? KEY_LABELS[combo.key] ?? combo.key.toUpperCase() : "";
+			return IS_MAC ? modifiers.join("") + key : [...modifiers, key].filter(Boolean).join(" + ");
 		}
 
 		function render() {
-			const s = { ...DEFAULTS, ...settings };
-			keyEl.value = s.key;
-			for (const m of MODS) document.getElementById(m).checked = !!s[m];
+			const source = { ...DEFAULTS, ...settings };
+			RECORDERS.hold.value = displayCombo(comboFromSettings(source, "hold"));
+			RECORDERS.release.value = displayCombo(comboFromSettings(source, "release"));
 		}
 
-		keyEl.addEventListener("change", save);
-		for (const m of MODS) document.getElementById(m).addEventListener("change", save);
+		function saveCombo(prefix, combo) {
+			settings = {
+				...settings,
+				[settingName(prefix, "key")]: combo.key,
+				[settingName(prefix, "modifiers")]: combo.mods,
+			};
+			websocket.send(JSON.stringify({ event: "setSettings", context: uuid, payload: settings }));
+			render();
+		}
+
+		function modifierFromCode(code) {
+			return {
+				ControlLeft: "lctrl", ControlRight: "rctrl",
+				AltLeft: "lalt", AltRight: "ralt",
+				ShiftLeft: "lshift", ShiftRight: "rshift",
+				MetaLeft: "lcmd", MetaRight: "rcmd",
+			}[code] ?? null;
+		}
+
+		function keyFromCode(code) {
+			if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase();
+			if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+			if (/^F(?:[1-9]|1[0-9]|20)$/.test(code)) return code.toLowerCase();
+			return KEY_CODES[code] ?? null;
+		}
+
+		function startRecording(prefix) {
+			recording = prefix;
+			pressedModifiers = new Set();
+			draftModifiers = new Set();
+			RECORDERS[prefix].value = "Press a combination…";
+		}
+
+		function finishRecording(prefix, key = "") {
+			const combo = { key, mods: MODIFIER_TOKENS.filter((mod) => draftModifiers.has(mod)) };
+			recording = null;
+			pressedModifiers.clear();
+			draftModifiers.clear();
+			saveCombo(prefix, combo);
+		}
+
+		function onKeyDown(prefix, event) {
+			if (recording !== prefix) return;
+			event.preventDefault();
+			event.stopPropagation();
+
+			const modifier = modifierFromCode(event.code);
+			if (modifier) {
+				pressedModifiers.add(modifier);
+				draftModifiers.add(modifier);
+				const partial = displayCombo({ key: "", mods: MODIFIER_TOKENS.filter((m) => draftModifiers.has(m)) });
+				RECORDERS[prefix].value = partial + (IS_MAC ? "" : " + ") + "…";
+				return;
+			}
+
+			if (event.ctrlKey && !draftModifiers.has("lctrl") && !draftModifiers.has("rctrl")) draftModifiers.add("ctrl");
+			if (event.altKey && !draftModifiers.has("lalt") && !draftModifiers.has("ralt")) draftModifiers.add("alt");
+			if (event.shiftKey && !draftModifiers.has("lshift") && !draftModifiers.has("rshift")) draftModifiers.add("shift");
+			if (event.metaKey && !draftModifiers.has("lcmd") && !draftModifiers.has("rcmd")) draftModifiers.add("cmd");
+			const key = keyFromCode(event.code);
+			if (key) finishRecording(prefix, key);
+			else RECORDERS[prefix].value = "Unsupported key — try another";
+		}
+
+		function onKeyUp(prefix, event) {
+			if (recording !== prefix) return;
+			const modifier = modifierFromCode(event.code);
+			if (!modifier) return;
+			event.preventDefault();
+			event.stopPropagation();
+			pressedModifiers.delete(modifier);
+			if (pressedModifiers.size === 0 && draftModifiers.size > 0) finishRecording(prefix);
+		}
+
+		for (const prefix of ["hold", "release"]) {
+			const recorder = RECORDERS[prefix];
+			recorder.addEventListener("focus", () => startRecording(prefix));
+			recorder.addEventListener("click", () => startRecording(prefix));
+			recorder.addEventListener("keydown", (event) => onKeyDown(prefix, event));
+			recorder.addEventListener("keyup", (event) => onKeyUp(prefix, event));
+			recorder.addEventListener("blur", () => {
+				if (recording === prefix) {
+					recording = null;
+					render();
+				}
+			});
+		}
+
+		document.getElementById("clearHold").addEventListener("click", () => saveCombo("hold", { key: "", mods: [] }));
+		document.getElementById("clearRelease").addEventListener("click", () => saveCombo("release", { key: "", mods: [] }));
 
 		function connectElgatoStreamDeckSocket(port, propertyInspectorUUID, registerEvent, info, actionInfo) {
 			uuid = propertyInspectorUUID;

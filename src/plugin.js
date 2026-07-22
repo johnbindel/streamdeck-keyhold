@@ -6,7 +6,11 @@ import streamDeck from "@elgato/streamdeck";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const HELPER = join(HERE, process.platform === "win32" ? "keyholder.exe" : "keyholder");
 
-const MODIFIERS = ["ctrl", "alt", "shift", "cmd"];
+const LEGACY_MODIFIERS = ["ctrl", "alt", "shift", "cmd"];
+const MODIFIER_TOKENS = [
+	"ctrl", "alt", "shift", "cmd",
+	"lctrl", "rctrl", "lalt", "ralt", "lshift", "rshift", "lcmd", "rcmd",
+];
 
 const DEFAULTS = {
 	key: "t",
@@ -14,6 +18,13 @@ const DEFAULTS = {
 	alt: true,
 	shift: false,
 	cmd: true,
+	modifiers: null,
+	releaseKey: "",
+	releaseCtrl: false,
+	releaseAlt: false,
+	releaseShift: false,
+	releaseCmd: false,
+	releaseModifiers: null,
 };
 
 /**
@@ -32,10 +43,21 @@ function send(line) {
 	helper.stdin.write(`${line}\n`);
 }
 
-function comboOf(settings) {
+function comboOf(settings, prefix = "") {
 	const merged = { ...DEFAULTS, ...settings };
-	const mods = MODIFIERS.filter((m) => merged[m]);
-	return { key: String(merged.key).toLowerCase(), mods };
+	const settingName = (name) => prefix
+		? `${prefix}${name[0].toUpperCase()}${name.slice(1)}`
+		: name;
+	const key = String(merged[settingName("key")] ?? "").toLowerCase();
+	const savedModifiers = merged[settingName("modifiers")];
+	const mods = Array.isArray(savedModifiers)
+		? savedModifiers.filter((modifier) => MODIFIER_TOKENS.includes(modifier))
+		: LEGACY_MODIFIERS.filter((modifier) => merged[settingName(modifier)]);
+	return key || mods.length ? { key, mods } : null;
+}
+
+function command(verb, { key, mods }) {
+	return `${verb} ${mods.length ? mods.join(",") : "-"} ${key || "-"}`;
 }
 
 /**
@@ -43,17 +65,23 @@ function comboOf(settings) {
  * different profile is showing, so release is unconditional rather than re-derived from
  * settings that may have changed underneath us mid-hold.
  */
-const holding = new Set();
+const holding = new Map();
 
 streamDeck.actions.onKeyDown((ev) => {
-	const { key, mods } = comboOf(ev.payload.settings);
-	send(`D ${mods.length ? mods.join(",") : "-"} ${key}`);
-	holding.add(ev.action.id);
+	const heldCombo = comboOf(ev.payload.settings);
+	if (heldCombo) send(command("D", heldCombo));
+	holding.set(ev.action.id, {
+		held: !!heldCombo,
+		releaseCombo: comboOf(ev.payload.settings, "release"),
+	});
 });
 
 streamDeck.actions.onKeyUp((ev) => {
-	if (!holding.delete(ev.action.id)) return;
-	send("U");
+	if (!holding.has(ev.action.id)) return;
+	const { held, releaseCombo } = holding.get(ev.action.id);
+	holding.delete(ev.action.id);
+	if (held) send("U");
+	if (releaseCombo) send(command("T", releaseCombo));
 });
 
 streamDeck.connect();
