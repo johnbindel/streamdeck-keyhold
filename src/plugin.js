@@ -19,6 +19,8 @@ const DEFAULTS = {
 	shift: false,
 	cmd: true,
 	modifiers: null,
+	preReleaseKey: "",
+	preReleaseModifiers: null,
 	releaseKey: "",
 	releaseCtrl: false,
 	releaseAlt: false,
@@ -72,14 +74,21 @@ streamDeck.actions.onKeyDown((ev) => {
 	if (heldCombo) send(command("D", heldCombo));
 	holding.set(ev.action.id, {
 		held: !!heldCombo,
+		preReleaseCombo: comboOf(ev.payload.settings, "preRelease"),
 		releaseCombo: comboOf(ev.payload.settings, "release"),
 	});
 });
 
+/**
+ * Order matters and is the whole point of having two slots: "B" taps on top of the hold
+ * while it is still down, "T" taps after it is gone. An app whose push-to-talk ends on a
+ * separate hotkey needs one or the other, and which one is not something we can guess.
+ */
 streamDeck.actions.onKeyUp((ev) => {
 	if (!holding.has(ev.action.id)) return;
-	const { held, releaseCombo } = holding.get(ev.action.id);
+	const { held, preReleaseCombo, releaseCombo } = holding.get(ev.action.id);
 	holding.delete(ev.action.id);
+	if (preReleaseCombo) send(command("B", preReleaseCombo));
 	if (held) send("U");
 	if (releaseCombo) send(command("T", releaseCombo));
 });

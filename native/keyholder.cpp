@@ -4,6 +4,7 @@
 //   D <mods> <key>   press and HOLD. Either field may be "-".
 //   U                release whatever is held
 //   T <mods> <key>   TAP a combo (press and release). mods is a comma list.
+//   B <mods> <key>   TAP a combo on top of whatever is held, leaving the hold down.
 //
 // Unlike macOS (where a combo is one event carrying modifier flags), SendInput has no
 // flags field: the modifier keys must be physically pressed, then the key, and released
@@ -112,6 +113,30 @@ void Press(const std::vector<WORD>& mods, WORD key) {
   }
 }
 
+// Tap a combo *without* disturbing the hold — this is what makes a "before release"
+// hotkey different from an "after release" one. Modifiers already down are reused rather
+// than re-pressed, and a tap key identical to a held key is skipped: its key-up would
+// cancel the very hold we are trying to preserve.
+void TapOver(const std::vector<WORD>& mods, WORD key) {
+  const auto is_held = [](WORD vk) {
+    return std::find(g_held.begin(), g_held.end(), vk) != g_held.end();
+  };
+
+  std::vector<WORD> extra;
+  for (WORD m : mods) {
+    if (!is_held(m)) extra.push_back(m);
+  }
+
+  for (WORD m : extra) SendKey(m, true);
+  if (key && !is_held(key)) {
+    SendKey(key, true);
+    SendKey(key, false);
+  } else if (key) {
+    std::cerr << "keyholder: skipping tap of the key already held\n";
+  }
+  for (auto it = extra.rbegin(); it != extra.rend(); ++it) SendKey(*it, false);
+}
+
 BOOL WINAPI OnConsoleEvent(DWORD) {
   ReleaseHeld();
   ExitProcess(0);
@@ -139,7 +164,7 @@ int main() {
       ReleaseHeld();
       continue;
     }
-    if (verb != "D" && verb != "T") continue;
+    if (verb != "D" && verb != "T" && verb != "B") continue;
 
     std::string mod_list, key_name;
     stream >> mod_list >> key_name;
@@ -163,6 +188,10 @@ int main() {
     }
 
     if (mods.empty() && !key_code) continue;
+    if (verb == "B") {
+      TapOver(mods, key_code);
+      continue;
+    }
     Press(mods, key_code);
     if (verb == "T") ReleaseHeld();
   }

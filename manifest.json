@@ -3,7 +3,7 @@
 	"Name": "Key Hold",
 	"Version": "1.0.2.0",
 	"Author": "John Bindel",
-	"Description": "Holds a key down for as long as you hold the Stream Deck key or pedal, and can optionally tap a second key when you let go. Real push-to-talk for dictation apps (Spokenly, Wispr Flow, Superwhisper), hold-to-move in games, or any feature that needs a key held rather than tapped.",
+	"Description": "Holds a key down for as long as you hold the Stream Deck key or pedal, and can optionally tap another hotkey just before or just after letting go. Real push-to-talk for dictation apps (Spokenly, Wispr Flow, Superwhisper), hold-to-move in games, or any feature that needs a key held rather than tapped.",
 	"Category": "Key Hold",
 	"CategoryIcon": "imgs/plugin",
 	"Icon": "imgs/plugin",
@@ -32,7 +32,7 @@
 			"Name": "Hold Key",
 			"UUID": "com.johnbindel.keyhold.hold",
 			"Icon": "imgs/action",
-			"Tooltip": "Holds the hotkey down while pressed. Can tap another hotkey on release.",
+			"Tooltip": "Holds the hotkey down while pressed. Can tap another hotkey before and/or after releasing.",
 			"PropertyInspectorPath": "ui/inspector.html",
 			"Controllers": [
 				"Keypad"

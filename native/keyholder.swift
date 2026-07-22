@@ -4,6 +4,7 @@
 //   D <mods> <key>   press and HOLD. Either field may be "-".
 //   U                release whatever is held
 //   T <mods> <key>   TAP a combo (press and release). mods is a comma list.
+//   B <mods> <key>   TAP a combo on top of whatever is held, leaving the hold down.
 //
 // Modifier events are posted separately so left/right identity is preserved. The regular
 // key event also carries the accumulated modifier flags.
@@ -84,6 +85,43 @@ enum Keyholder {
         }
     }
 
+    /// Tap a combo *without* disturbing the hold — this is what makes a "before release"
+    /// hotkey different from an "after release" one. Modifiers already held are reused
+    /// rather than re-posted, and a tap key identical to the held key is skipped: its
+    /// key-up would cancel the very hold we are trying to preserve.
+    static func tapOver(_ key: CGKeyCode?, _ modifiers: [(CGKeyCode, CGEventFlags)]) {
+        var heldFlags: CGEventFlags = []
+        for (_, flag) in heldModifiers {
+            heldFlags.insert(flag)
+        }
+        let heldModifierKeys = Set(heldModifiers.map { $0.0 })
+        var extra = modifiers.filter { !heldModifierKeys.contains($0.0) }
+
+        var currentFlags = heldFlags
+        for (modifierKey, flag) in extra {
+            currentFlags.insert(flag)
+            postModifier(modifierKey, currentFlags)
+        }
+
+        if let key {
+            if key == held {
+                FileHandle.standardError.write(
+                    Data("keyholder: skipping tap of the key already held\n".utf8))
+            } else {
+                post(key, currentFlags, down: true)
+                post(key, currentFlags, down: false)
+            }
+        }
+
+        while let (modifierKey, _) = extra.popLast() {
+            currentFlags = heldFlags
+            for (_, remainingFlag) in extra {
+                currentFlags.insert(remainingFlag)
+            }
+            postModifier(modifierKey, currentFlags)
+        }
+    }
+
     static func releaseHeld() {
         var currentFlags: CGEventFlags = []
         for (_, flag) in heldModifiers {
@@ -127,7 +165,7 @@ while let line = readLine(strippingNewline: true) {
     case "U":
         Keyholder.releaseHeld()
 
-    case "D", "T":
+    case "D", "T", "B":
         guard parts.count == 3 else {
             FileHandle.standardError.write(Data("keyholder: bad command: \(line)\n".utf8))
             continue
@@ -146,6 +184,10 @@ while let line = readLine(strippingNewline: true) {
             }
         }
         guard key != nil || !modifiers.isEmpty else { continue }
+        if verb == "B" {
+            Keyholder.tapOver(key, modifiers)
+            continue
+        }
         Keyholder.press(key, modifiers)
         if verb == "T" {
             Keyholder.releaseHeld()
