@@ -1,10 +1,13 @@
-// keyholder (macOS) — holds a key combo down until told to release.
+// keyholder (macOS) — holds key combos down until told to release.
 //
 // Protocol, one command per line on stdin:
-//   D <mods> <key>   press and HOLD. Either field may be "-".
-//   U                release whatever is held
-//   T <mods> <key>   TAP a combo (press and release). mods is a comma list.
-//   B <mods> <key>   TAP a combo on top of whatever is held, leaving the hold down.
+//   D <id> <mods> <key>   press and HOLD under <id>. Either combo field may be "-".
+//   U <id>                release the hold owned by <id>
+//   T <mods> <key>        TAP a combo without disturbing anything held
+//
+// Holds are keyed by id because several Stream Deck buttons or pedals can be down at
+// once, and each must release only its own keys. A shared key or modifier stays down
+// until the last hold that wants it lets go.
 //
 // Modifier events are posted separately so left/right identity is preserved. The regular
 // key event also carries the accumulated modifier flags.
@@ -31,7 +34,8 @@ enum Keyholder {
         "space": 49,
         "0": 29, "1": 18, "2": 19, "3": 20, "4": 21,
         "5": 23, "6": 22, "7": 26, "8": 28, "9": 25,
-        "enter": 36, "numpadenter": 76, "tab": 48, "escape": 53, "backspace": 51, "delete": 117,
+        "enter": 36, "numpadenter": 76, "tab": 48, "escape": 53, "backspace": 51,
+        "delete": 117,
         "insert": 114, "home": 115, "end": 119, "pageup": 116, "pagedown": 121,
         "left": 123, "right": 124, "down": 125, "up": 126,
         "semicolon": 41, "equal": 24, "comma": 43, "minus": 27, "period": 47,
@@ -50,11 +54,34 @@ enum Keyholder {
         "cmd": (55, .maskCommand), "lcmd": (55, .maskCommand), "rcmd": (54, .maskCommand),
     ]
 
-    /// What we are currently holding, so we can always release it — even if the plugin
-    /// dies mid-hold. A stuck key is the worst failure here: it would make the machine
-    /// unusable until logout.
-    static var held: CGKeyCode?
-    static var heldModifiers: [(CGKeyCode, CGEventFlags)] = []
+    struct Hold {
+        let id: String
+        let key: CGKeyCode?
+        let modifiers: [(CGKeyCode, CGEventFlags)]
+    }
+
+    /// Everything currently held, in press order, so we can always release it — even if
+    /// the plugin dies mid-hold. A stuck key is the worst failure here: it would make the
+    /// machine unusable until logout.
+    static var holds: [Hold] = []
+
+    static func currentFlags() -> CGEventFlags {
+        var flags: CGEventFlags = []
+        for hold in holds {
+            for (_, flag) in hold.modifiers {
+                flags.insert(flag)
+            }
+        }
+        return flags
+    }
+
+    static func isKeyDown(_ key: CGKeyCode) -> Bool {
+        holds.contains { $0.key == key }
+    }
+
+    static func isModifierDown(_ modifierKey: CGKeyCode) -> Bool {
+        holds.contains { hold in hold.modifiers.contains { $0.0 == modifierKey } }
+    }
 
     static func post(_ key: CGKeyCode, _ flags: CGEventFlags, down: Bool) {
         guard let event = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: down)
@@ -71,78 +98,91 @@ enum Keyholder {
         event.post(tap: .cghidEventTap)
     }
 
-    static func press(_ key: CGKeyCode?, _ modifiers: [(CGKeyCode, CGEventFlags)]) {
-        releaseHeld()
-        var currentFlags: CGEventFlags = []
+    /// Keys another hold already has down are not pressed again — a second press would be
+    /// harmless, but the matching release would not: it would cancel the other hold.
+    static func press(id: String, key: CGKeyCode?, modifiers: [(CGKeyCode, CGEventFlags)]) {
+        release(id: id)
+        var flags = currentFlags()
         for (modifierKey, flag) in modifiers {
-            currentFlags.insert(flag)
-            postModifier(modifierKey, currentFlags)
-            heldModifiers.append((modifierKey, flag))
+            let alreadyDown = isModifierDown(modifierKey)
+            flags.insert(flag)
+            if !alreadyDown {
+                postModifier(modifierKey, flags)
+            }
         }
-        if let key {
-            post(key, currentFlags, down: true)
-            held = key
+        if let key, !isKeyDown(key) {
+            post(key, flags, down: true)
+        }
+        holds.append(Hold(id: id, key: key, modifiers: modifiers))
+    }
+
+    static func release(id: String) {
+        guard let index = holds.firstIndex(where: { $0.id == id }) else { return }
+        let hold = holds.remove(at: index)
+
+        // The key-up carries the flags that were in effect while it was down, including
+        // this hold's own modifiers — those come off afterwards.
+        var flags = currentFlags()
+        for (_, flag) in hold.modifiers {
+            flags.insert(flag)
+        }
+        if let key = hold.key, !isKeyDown(key) {
+            post(key, flags, down: false)
+        }
+
+        var remaining = hold.modifiers
+        while let (modifierKey, _) = remaining.popLast() {
+            if isModifierDown(modifierKey) { continue }
+            flags = currentFlags()
+            for (_, remainingFlag) in remaining {
+                flags.insert(remainingFlag)
+            }
+            postModifier(modifierKey, flags)
         }
     }
 
-    /// Tap a combo *without* disturbing the hold — this is what makes a "before release"
-    /// hotkey different from an "after release" one. Modifiers already held are reused
-    /// rather than re-posted, and a tap key identical to the held key is skipped: its
-    /// key-up would cancel the very hold we are trying to preserve.
-    static func tapOver(_ key: CGKeyCode?, _ modifiers: [(CGKeyCode, CGEventFlags)]) {
-        var heldFlags: CGEventFlags = []
-        for (_, flag) in heldModifiers {
-            heldFlags.insert(flag)
+    static func releaseAll() {
+        for id in holds.map(\.id).reversed() {
+            release(id: id)
         }
-        let heldModifierKeys = Set(heldModifiers.map { $0.0 })
-        var extra = modifiers.filter { !heldModifierKeys.contains($0.0) }
+    }
 
-        var currentFlags = heldFlags
+    /// Tap a combo *without* disturbing any hold — this is what makes a "before release"
+    /// hotkey different from an "after release" one. Modifiers already held are reused
+    /// rather than re-posted, and a tap of a key that is currently held is skipped: its
+    /// key-up would cancel the hold that owns it.
+    static func tapOver(_ key: CGKeyCode?, _ modifiers: [(CGKeyCode, CGEventFlags)]) {
+        let heldFlags = currentFlags()
+        var extra = modifiers.filter { !isModifierDown($0.0) }
+
+        var flags = heldFlags
         for (modifierKey, flag) in extra {
-            currentFlags.insert(flag)
-            postModifier(modifierKey, currentFlags)
+            flags.insert(flag)
+            postModifier(modifierKey, flags)
         }
 
         if let key {
-            if key == held {
+            if isKeyDown(key) {
                 FileHandle.standardError.write(
                     Data("keyholder: skipping tap of the key already held\n".utf8))
             } else {
-                post(key, currentFlags, down: true)
-                post(key, currentFlags, down: false)
+                post(key, flags, down: true)
+                post(key, flags, down: false)
             }
         }
 
         while let (modifierKey, _) = extra.popLast() {
-            currentFlags = heldFlags
+            flags = heldFlags
             for (_, remainingFlag) in extra {
-                currentFlags.insert(remainingFlag)
+                flags.insert(remainingFlag)
             }
-            postModifier(modifierKey, currentFlags)
-        }
-    }
-
-    static func releaseHeld() {
-        var currentFlags: CGEventFlags = []
-        for (_, flag) in heldModifiers {
-            currentFlags.insert(flag)
-        }
-        if let key = held {
-            post(key, currentFlags, down: false)
-            held = nil
-        }
-        while let (modifierKey, _) = heldModifiers.popLast() {
-            currentFlags = []
-            for (_, remainingFlag) in heldModifiers {
-                currentFlags.insert(remainingFlag)
-            }
-            postModifier(modifierKey, currentFlags)
+            postModifier(modifierKey, flags)
         }
     }
 }
 
 func onSignal(_ signum: Int32) {
-    Keyholder.releaseHeld()
+    Keyholder.releaseAll()
     exit(0)
 }
 
@@ -157,40 +197,50 @@ for sig in [SIGTERM, SIGINT, SIGHUP] {
     signal(sig, onSignal)
 }
 
+func badCommand(_ line: String) {
+    FileHandle.standardError.write(Data("keyholder: bad command: \(line)\n".utf8))
+}
+
 while let line = readLine(strippingNewline: true) {
     let parts = line.split(separator: " ")
     guard let verb = parts.first else { continue }
 
     switch verb {
     case "U":
-        Keyholder.releaseHeld()
-
-    case "D", "T", "B":
-        guard parts.count == 3 else {
-            FileHandle.standardError.write(Data("keyholder: bad command: \(line)\n".utf8))
+        guard parts.count == 2 else {
+            badCommand(line)
             continue
         }
-        let keyName = String(parts[2]).lowercased()
+        Keyholder.release(id: String(parts[1]))
+
+    case "D", "T":
+        let isHold = verb == "D"
+        guard parts.count == (isHold ? 4 : 3) else {
+            badCommand(line)
+            continue
+        }
+        let id = isHold ? String(parts[1]) : ""
+        let modField = parts[isHold ? 2 : 1]
+        let keyName = String(parts[isHold ? 3 : 2]).lowercased()
+
         let key = keyName == "-" ? nil : Keyholder.keys[keyName]
         if keyName != "-" && key == nil {
-            FileHandle.standardError.write(Data("keyholder: bad command: \(line)\n".utf8))
+            badCommand(line)
             continue
         }
         var modifiers: [(CGKeyCode, CGEventFlags)] = []
-        if parts[1] != "-" {
-            for name in parts[1].split(separator: ",") {
+        if modField != "-" {
+            for name in modField.split(separator: ",") {
                 guard let modifier = Keyholder.modifierKeys[String(name).lowercased()] else { continue }
                 modifiers.append(modifier)
             }
         }
         guard key != nil || !modifiers.isEmpty else { continue }
-        if verb == "B" {
+
+        if isHold {
+            Keyholder.press(id: id, key: key, modifiers: modifiers)
+        } else {
             Keyholder.tapOver(key, modifiers)
-            continue
-        }
-        Keyholder.press(key, modifiers)
-        if verb == "T" {
-            Keyholder.releaseHeld()
         }
 
     default:
@@ -199,4 +249,4 @@ while let line = readLine(strippingNewline: true) {
 }
 
 // stdin closed — Stream Deck killed the plugin. Never leave a key down.
-Keyholder.releaseHeld()
+Keyholder.releaseAll()

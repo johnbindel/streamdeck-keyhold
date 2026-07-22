@@ -94,16 +94,24 @@ Two things in the build are load-bearing and non-obvious:
 
 ```
 Stream Deck key/pedal
-  → plugin.js          onKeyDown → "D ctrl,alt,cmd t"      (Node, via the Elgato SDK)
-                       onKeyUp   → optional "B - f14", then "U",
+  → plugin.js          onKeyDown → "D <id> ctrl,alt,cmd t"  (Node, via the Elgato SDK)
+                       onKeyUp   → optional "T - f14", then "U <id>",
                                    then optional "T - f13"
   → keyholder          holds the combo until told to release  (Swift on macOS, C++ on Windows)
 ```
 
-`B` is the reason the two optional slots are not the same feature twice: it taps *on top of*
-the hold rather than replacing it, so the before-release hotkey reaches the app while the
-held key is still down. Modifiers already held are reused instead of re-pressed, and a tap
-of the key that is currently held is skipped — its key-up would cancel the hold.
+`T` taps *on top of* whatever is held rather than replacing it, which is what makes the two
+optional slots different features: the before-release hotkey reaches the app while the held
+key is still down. Modifiers already held are reused instead of re-pressed, and a tap of a
+key that is currently held is skipped — its key-up would cancel the hold that owns it.
+
+Holds are keyed by action id, so two pedals can be down at once and each releases only its
+own keys. A key or modifier shared by both stays down until the last hold wants it gone.
+
+Two backstops guard against the plugin's worst failure, a key left down forever. The helper
+releases everything on `SIGTERM`, `SIGINT`, `SIGHUP`, and stdin close. The plugin also
+releases on `onWillDisappear` — a profile switch or an unplugged device can swallow the
+key-up — and gives every hold a five-minute deadline in case one is lost anyway.
 
 The helper is a long-lived process reading one command per line on stdin. It owns the combo
 semantics because they differ per platform. **macOS** posts modifier `flagsChanged` events
@@ -113,9 +121,8 @@ press each modifier, then the key, then release them in reverse.
 On macOS the events are built on a `hidSystemState` source and posted to the `cghidEventTap`
 — the lowest injection point CoreGraphics exposes.
 
-The helper always tracks what it is holding and releases it on `SIGTERM`, `SIGINT`, `SIGHUP`,
-and stdin close. A key left stuck down is the worst failure mode here — a stuck modifier makes
-the machine unusable until logout — so every exit path releases.
+A key left stuck down is the worst failure mode here — a stuck modifier makes the machine
+unusable until logout — so every exit path releases.
 
 ## Status
 
