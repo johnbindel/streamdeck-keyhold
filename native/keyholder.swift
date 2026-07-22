@@ -222,10 +222,16 @@ enum Capture {
     static let timeout: CFTimeInterval = 15
     static let lock = NSLock()
     static var loop: CFRunLoop?
+    static var stopRequested = false
+
+    /// The tap, so the callback can switch it back on. macOS disables a tap that takes too
+    /// long, and a disabled tap stops swallowing without stopping the recording.
+    static var tap: CFMachPort?
 
     static func start() {
         lock.lock()
         let alreadyRunning = loop != nil
+        if !alreadyRunning { stopRequested = false }
         lock.unlock()
         if alreadyRunning { return }
 
@@ -234,12 +240,15 @@ enum Capture {
         thread.start()
     }
 
+    /// Stopping has to work even in the window between `start()` returning and the capture
+    /// thread having a run loop to stop — otherwise the request is dropped and the keyboard
+    /// stays swallowed until the timeout, which is exactly the failure this guards against.
     static func stop() {
         lock.lock()
+        stopRequested = true
         let running = loop
         lock.unlock()
-        guard let running else { return }
-        CFRunLoopStop(running)
+        if let running { CFRunLoopStop(running) }
     }
 
     private static func run() {
@@ -274,16 +283,21 @@ enum Capture {
 
         lock.lock()
         loop = CFRunLoopGetCurrent()
+        Capture.tap = tap
+        // A stop that arrived while this thread was still starting up saw no run loop to
+        // stop, so honour it here rather than swallowing the keyboard until the timeout.
+        let cancelled = stopRequested
         lock.unlock()
         emit("CAPTURE on")
 
-        CFRunLoopRun()
+        if !cancelled { CFRunLoopRun() }
 
         CGEvent.tapEnable(tap: tap, enable: false)
         CFRunLoopRemoveTimer(CFRunLoopGetCurrent(), deadline, .commonModes)
         CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
         lock.lock()
         loop = nil
+        Capture.tap = nil
         lock.unlock()
         emit("CAPTURE off")
     }
@@ -296,9 +310,14 @@ func onCapturedEvent(
     event: CGEvent,
     refcon: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
-    // The system disables a tap that takes too long. Let the event through and carry on
-    // rather than silently capturing nothing from here on.
+    // The system disables a tap that takes too long, and a disabled tap goes on delivering
+    // keys to whatever they are bound to while the inspector still believes it is
+    // recording. Switch it back on rather than capturing nothing from here.
     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        Capture.lock.lock()
+        let tap = Capture.tap
+        Capture.lock.unlock()
+        if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
         return Unmanaged.passUnretained(event)
     }
 

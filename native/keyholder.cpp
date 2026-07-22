@@ -231,6 +231,7 @@ std::string NameForKey(DWORD vk, bool extended) {
 constexpr UINT kCaptureTimeoutMs = 15000;
 std::thread g_capture;
 std::atomic<DWORD> g_capture_thread_id{0};
+std::atomic<bool> g_stop_capture{false};
 HHOOK g_hook = nullptr;
 
 LRESULT CALLBACK OnCapturedKey(int code, WPARAM w_param, LPARAM l_param) {
@@ -253,7 +254,13 @@ void CaptureRun() {
   Emit("CAPTURE on");
 
   MSG msg;
-  while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+  // A stop that arrived while this thread was still starting up had no thread id to post
+  // to. Publishing the id above and reading the flag here closes that window from this
+  // side: either the stopper saw the id and posted WM_QUIT, or it set the flag first and
+  // we see it now. Without this the message loop would run for the full timeout with the
+  // keyboard swallowed, and StopCapture's join would block the thread reading stdin —
+  // freezing every other command too.
+  while (!g_stop_capture.load() && GetMessageW(&msg, nullptr, 0, 0) > 0) {
     if (msg.message == WM_TIMER) break;
   }
 
@@ -265,6 +272,10 @@ void CaptureRun() {
 }
 
 void StopCapture() {
+  // Set the flag before reading the id: CaptureRun publishes its id and then reads this
+  // flag, so one of the two always observes the other. Ordering it the other way would
+  // leave a window where neither does and the join below waits out the full timeout.
+  g_stop_capture = true;
   const DWORD id = g_capture_thread_id.load();
   if (id != 0) PostThreadMessageW(id, WM_QUIT, 0, 0);
   if (g_capture.joinable()) g_capture.join();
@@ -273,6 +284,7 @@ void StopCapture() {
 void StartCapture() {
   if (g_capture_thread_id.load() != 0) return;
   if (g_capture.joinable()) g_capture.join();
+  g_stop_capture = false;
   g_capture = std::thread(CaptureRun);
 }
 
