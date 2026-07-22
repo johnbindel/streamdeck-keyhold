@@ -39,7 +39,7 @@
 			],
 			"States": [
 				{
-					"Image": "imgs/action",
+					"Image": "imgs/key",
 					"TitleAlignment": "middle"
 				}
 			]
