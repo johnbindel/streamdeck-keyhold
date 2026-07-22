@@ -103,15 +103,17 @@
 			BracketLeft: "leftbracket", Backslash: "backslash",
 			BracketRight: "rightbracket", Quote: "quote",
 		};
+		const IS_MAC = /Mac/.test(navigator.platform);
 		const KEY_LABELS = {
-			enter: "Enter", space: "Space", tab: "Tab", escape: "Esc",
+			// Return is the one key macOS users read as a glyph rather than a word.
+			enter: IS_MAC ? "⏎" : "Enter",
+			space: "Space", tab: "Tab", escape: "Esc",
 			backspace: "Backspace", delete: "Delete", insert: "Insert",
 			home: "Home", end: "End", pageup: "Page Up", pagedown: "Page Down",
 			left: "←", right: "→", up: "↑", down: "↓", semicolon: ";", equal: "=",
 			comma: ",", minus: "−", period: ".", slash: "/", backquote: "`",
 			leftbracket: "[", backslash: "\\", rightbracket: "]", quote: "'",
 		};
-		const IS_MAC = /Mac/.test(navigator.platform);
 		const MOD_LABELS = {
 			ctrl: IS_MAC ? "⌃" : "Ctrl", alt: IS_MAC ? "⌥" : "Alt",
 			shift: IS_MAC ? "⇧" : "Shift", cmd: IS_MAC ? "⌘" : "Win",
