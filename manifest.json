@@ -33,7 +33,7 @@
 			"UUID": "com.johnbindel.keyhold.hold",
 			"Icon": "imgs/action",
 			"Tooltip": "Holds the hotkey down while pressed. Can tap another hotkey before and/or after releasing.",
-			"PropertyInspectorPath": "ui/inspector.html",
+			"PropertyInspectorPath": "ui/hold.html",
 			"Controllers": [
 				"Keypad"
 			],

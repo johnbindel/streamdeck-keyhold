@@ -23,7 +23,7 @@ env -u SDKROOT -u DEVELOPER_DIR /usr/bin/xcrun --sdk macosx swiftc -O \
   --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
 
 node scripts/build-manifest.js "$OUT/manifest.json"
-cp ui/inspector.html "$OUT/ui/inspector.html"
+cp ui/* "$OUT/ui/"
 cp imgs/*.png "$OUT/imgs/"
 
 rm -rf "$DEST"
