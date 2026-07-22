@@ -64,6 +64,12 @@ combination. If the target app needs a separate shortcut to end push-to-talk, re
 stop hotkey while the talk key is still down, others want it once the talk key is gone. Use
 the × button beside any field to clear it.
 
+**Pause before** and **Pause after** sit either side of letting go of the hold, and are 0 by
+default. Raise them if the target app misses a hotkey that lands in the same instant as the
+release; a few tens of milliseconds is usually enough. **Pause before** on its own is also a
+way to keep holding for a moment after you let go, which can stop a dictation app clipping
+your last word.
+
 On macOS, Stream Deck needs Accessibility permission to send keystrokes at all
 (System Settings → Privacy & Security → Accessibility). If your existing Hotkey actions work,
 you already have this.
