@@ -63,12 +63,34 @@ function comboFields({ key, mods }) {
 }
 
 /**
- * The helper keys holds by action id so two pedals held at once release only their own
- * keys. Ids come from Stream Deck and are opaque, so strip anything that would confuse a
- * space-delimited protocol.
+ * The helper keys holds by id so two pedals held at once release only their own keys.
+ * Every press gets a fresh id: with a pause configured, a release sequence outlives the
+ * press, and a re-press during that window must not have its brand-new hold torn down by
+ * the previous sequence's release. Stream Deck ids are opaque, so strip anything that
+ * would confuse a space-delimited protocol.
  */
-function holdId(actionId) {
-	return String(actionId).replace(/\s+/g, "");
+let holdCount = 0;
+
+function nextHoldId(actionId) {
+	holdCount += 1;
+	return `${String(actionId).replace(/\s+/g, "")}-${holdCount}`;
+}
+
+/**
+ * Milliseconds to wait, clamped to something a person could plausibly want. An app that
+ * drops a hotkey arriving in the same millisecond as the release needs a gap of tens of
+ * milliseconds; anything past a few seconds is a misconfiguration.
+ */
+const MAX_PAUSE_MS = 5000;
+
+function pauseOf(settings, name) {
+	const value = Math.round(Number(settings?.[name]));
+	if (!Number.isFinite(value) || value <= 0) return 0;
+	return Math.min(value, MAX_PAUSE_MS);
+}
+
+function pause(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -87,18 +109,23 @@ const MAX_HOLD_MS = 5 * 60 * 1000;
 const holding = new Map();
 
 function beginHold(actionId, settings) {
-	finishHold(actionId);
+	const previous = finishHold(actionId);
+	const id = nextHoldId(actionId);
 	const heldCombo = comboOf(settings);
-	if (heldCombo) send(`D ${holdId(actionId)} ${comboFields(heldCombo)}`);
+	if (heldCombo) send(`D ${id} ${comboFields(heldCombo)}`);
 	holding.set(actionId, {
+		id,
 		held: !!heldCombo,
 		preReleaseCombo: comboOf(settings, "preRelease"),
 		releaseCombo: comboOf(settings, "release"),
+		pauseBeforeRelease: pauseOf(settings, "pauseBeforeReleaseMs"),
+		pauseAfterRelease: pauseOf(settings, "pauseAfterReleaseMs"),
 		deadline: setTimeout(() => {
 			streamDeck.logger.warn(`hold on ${actionId} passed ${MAX_HOLD_MS}ms; releasing it`);
-			finishHold(actionId);
+			reported(finishHold(actionId));
 		}, MAX_HOLD_MS),
 	});
+	return previous;
 }
 
 /**
@@ -109,19 +136,41 @@ function beginHold(actionId, settings) {
  */
 function finishHold(actionId) {
 	const hold = holding.get(actionId);
-	if (!hold) return;
+	if (!hold) return Promise.resolve();
 	holding.delete(actionId);
 	clearTimeout(hold.deadline);
+
 	if (hold.preReleaseCombo) send(`T ${comboFields(hold.preReleaseCombo)}`);
-	if (hold.held) send(`U ${holdId(actionId)}`);
+	if (!hold.pauseBeforeRelease && !hold.pauseAfterRelease) {
+		if (hold.held) send(`U ${hold.id}`);
+		if (hold.releaseCombo) send(`T ${comboFields(hold.releaseCombo)}`);
+		return Promise.resolve();
+	}
+	return releaseAfterPauses(hold);
+}
+
+/**
+ * The paused path is separate so the common case — no pauses configured — stays a
+ * straight line of writes with no await between the tap and the release.
+ */
+async function releaseAfterPauses(hold) {
+	if (hold.pauseBeforeRelease) await pause(hold.pauseBeforeRelease);
+	if (hold.held) send(`U ${hold.id}`);
+	if (hold.pauseAfterRelease) await pause(hold.pauseAfterRelease);
 	if (hold.releaseCombo) send(`T ${comboFields(hold.releaseCombo)}`);
 }
 
-streamDeck.actions.onKeyDown((ev) => beginHold(ev.action.id, ev.payload.settings));
-streamDeck.actions.onKeyUp((ev) => finishHold(ev.action.id));
+// A pause makes releasing asynchronous, so the handlers hand the promise back rather than
+// dropping it. Nothing waits on the result, but a failure has to reach the log.
+function reported(release) {
+	return release.catch((err) => streamDeck.logger.error(`release failed: ${err}`));
+}
+
+streamDeck.actions.onKeyDown((ev) => reported(beginHold(ev.action.id, ev.payload.settings)));
+streamDeck.actions.onKeyUp((ev) => reported(finishHold(ev.action.id)));
 
 // The button is going away — switched profile, unplugged device, page change. Its key-up
 // may never arrive, so let go now rather than leave the key down.
-streamDeck.actions.onWillDisappear((ev) => finishHold(ev.action.id));
+streamDeck.actions.onWillDisappear((ev) => reported(finishHold(ev.action.id)));
 
 streamDeck.connect();

@@ -35,6 +35,8 @@
 			cursor: pointer;
 		}
 		.recorder button:hover { background: #555; color: #fff; }
+		.recorder input[type="number"] { cursor: text; }
+		.unit { width: 27px; line-height: 27px; text-align: center; color: #7a7a7a; }
 		.hint {
 			color: #7a7a7a;
 			margin-top: 12px;
@@ -66,12 +68,32 @@
 			<button id="clearRelease" title="Clear after-release combination" aria-label="Clear after-release combination">×</button>
 		</div>
 	</div>
+	<div class="row">
+		<div class="label">Pause before</div>
+		<div class="recorder">
+			<input id="pauseBeforeRelease" type="number" min="0" max="5000" step="10" placeholder="0"
+				aria-label="Milliseconds to wait before releasing the hold" />
+			<div class="unit">ms</div>
+		</div>
+	</div>
+	<div class="row">
+		<div class="label">Pause after</div>
+		<div class="recorder">
+			<input id="pauseAfterRelease" type="number" min="0" max="5000" step="10" placeholder="0"
+				aria-label="Milliseconds to wait after releasing the hold" />
+			<div class="unit">ms</div>
+		</div>
+	</div>
 	<div class="hint">
 		Click a field, then press a key combination. Ctrl, Alt/Option, Shift, and Cmd/Win
 		can be recorded by themselves.
 		The hold combination stays down while the button or pedal is pressed. When you let go,
 		<b>Before release</b> is tapped while the hold is still down, then the hold is released,
 		then <b>After release</b> is tapped. Use either, both, or neither.
+		<br />
+		The pauses sit either side of letting go of the hold. Raise them if the target app
+		misses a hotkey that lands in the same instant as the release; leave them at 0
+		otherwise.
 	</div>
 
 	<script>
@@ -84,10 +106,16 @@
 			key: "t", ctrl: true, alt: true, cmd: true, shift: false,
 			modifiers: null,
 			preReleaseKey: "", preReleaseModifiers: null,
+			pauseBeforeReleaseMs: 0, pauseAfterReleaseMs: 0,
 			releaseKey: "", releaseCtrl: false, releaseAlt: false,
 			releaseShift: false, releaseCmd: false, releaseModifiers: null,
 		};
 		const PREFIXES = ["hold", "preRelease", "release"];
+		const MAX_PAUSE_MS = 5000;
+		const PAUSES = {
+			pauseBeforeReleaseMs: document.getElementById("pauseBeforeRelease"),
+			pauseAfterReleaseMs: document.getElementById("pauseAfterRelease"),
+		};
 		const RECORDERS = {
 			hold: document.getElementById("holdRecorder"),
 			preRelease: document.getElementById("preReleaseRecorder"),
@@ -162,6 +190,18 @@
 			for (const prefix of PREFIXES) {
 				RECORDERS[prefix].value = displayCombo(comboFromSettings(source, prefix));
 			}
+			for (const [name, input] of Object.entries(PAUSES)) {
+				// Leave the field alone while it has focus, so re-rendering cannot rewrite
+				// digits out from under someone mid-edit.
+				if (document.activeElement !== input) {
+					input.value = source[name] ? String(source[name]) : "";
+				}
+			}
+		}
+
+		function save() {
+			websocket.send(JSON.stringify({ event: "setSettings", context: uuid, payload: settings }));
+			render();
 		}
 
 		function saveCombo(prefix, combo) {
@@ -170,8 +210,16 @@
 				[settingName(prefix, "key")]: combo.key,
 				[settingName(prefix, "modifiers")]: combo.mods,
 			};
-			websocket.send(JSON.stringify({ event: "setSettings", context: uuid, payload: settings }));
-			render();
+			save();
+		}
+
+		function savePause(name, raw) {
+			const value = Math.round(Number(raw));
+			settings = {
+				...settings,
+				[name]: Number.isFinite(value) && value > 0 ? Math.min(value, MAX_PAUSE_MS) : 0,
+			};
+			save();
 		}
 
 		function modifierFromCode(code) {
@@ -250,6 +298,11 @@
 					render();
 				}
 			});
+		}
+
+		for (const [name, input] of Object.entries(PAUSES)) {
+			input.addEventListener("change", () => savePause(name, input.value));
+			input.addEventListener("blur", () => savePause(name, input.value));
 		}
 
 		const CLEAR_BUTTONS = { hold: "clearHold", preRelease: "clearPreRelease", release: "clearRelease" };
