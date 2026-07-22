@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+	<!-- The "on" state for hold: the same mark knocked out of a filled tile. Inverting is
+	     the only treatment that still reads as live at a glance across a room, which is the
+	     whole job of this image — with a latch you cannot otherwise tell it is running. -->
+	<rect x="6" y="6" width="132" height="132" rx="22" fill="#ffffff" />
+	<g fill="none" stroke="#14171b" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+		<path d="M38 24l34 30 34-30" />
+		<path d="M38 68l34 30 34-30" />
+		<path d="M30 122h84" />
+	</g>
+</svg>

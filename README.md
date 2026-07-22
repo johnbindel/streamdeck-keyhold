@@ -12,6 +12,18 @@ macOS**, where nothing else did the job.
 
 Works with Stream Deck keys, the Stream Deck Pedal, and any other Stream Deck surface.
 
+## Actions
+
+| Action | What it does |
+|---|---|
+| **Hold Key** | Holds the combination for exactly as long as you hold the button or pedal. The key lights up while it is down. |
+| **Toggle Hold** | Press once to start holding, press again to let go — for long dictation, or when holding a pedal down is uncomfortable. Lights up while it runs, and lets go by itself after five minutes if you forget. |
+| **Timed Tap** | One press, held for a time you set. For apps that ignore a tap sent and released in the same instant. |
+| **Repeat Key** | Sends the combination over and over while you hold the button, rather than holding it. For apps and games that act on each keypress and ignore a held key. |
+
+Hold Key and Toggle Hold share the optional **Before release** and **After release**
+hotkeys and their pauses, tucked behind *Release options* since most setups need neither.
+
 ## Why the built-in actions don't work
 
 Stream Deck ships three actions that look like they should do this. None do:
@@ -28,6 +40,26 @@ the only way to get a real hold, and it's what this plugin is built on.
 There is one other open-source plugin using this seam,
 [voji/hotkeyhold_sd](https://github.com/voji/sendkey_sd) — but it's Windows-only and has no
 modifier support. As far as I can tell, this is the first macOS implementation.
+
+## Recording a shortcut that is already taken
+
+The whole point of this plugin is to send a hotkey another app is listening for — so
+recording it must not trigger it. A property inspector is a web view, and by the time a
+keystroke reaches one the system has already acted on it: `preventDefault` stops the page
+from responding, but cannot stop macOS or Windows from having already fired whatever the
+combination is bound to. Elgato's own Hotkey field avoids this by capturing below the
+browser, which no part of the plugin SDK exposes.
+
+So the helper does it. While a recorder field has focus, the plugin asks the helper to tap
+the keyboard, swallow every key, and report what it saw; the property inspector builds the
+combination from those reports instead of from browser events. Recording `⌃⌥⌘T` records it
+rather than firing it, and keys the system would otherwise eat entirely — `⌘Tab`, `⌃↑` —
+are recordable too.
+
+Two things make a swallowed keyboard safe: the helper releases it after fifteen seconds no
+matter what, and the plugin releases it as soon as the inspector closes. If the tap cannot
+be created at all — no Accessibility permission on macOS — recording falls back to browser
+events, which still works for combinations that are not already shortcuts.
 
 ## Modifier-only shortcuts
 
@@ -58,8 +90,8 @@ modifiers — `Ctrl+Alt+Cmd+T`, or an F13–F19 key — and record the same comb
 Download the `.streamDeckPlugin` file from
 [Releases](https://github.com/johnbindel/streamdeck-keyhold/releases) and double-click it.
 
-Then drag **Hold Key** onto a key or pedal. Click the **Hold** field and press the desired
-combination. If the target app needs a separate shortcut to end push-to-talk, record it in
+Then drag one of the four actions onto a key or pedal — **Hold Key** is the one you want
+for push-to-talk. Click the **Hold** field and press the desired combination. If the target app needs a separate shortcut to end push-to-talk, record it in
 **Before release** or **After release** depending on which the app expects — some want the
 stop hotkey while the talk key is still down, others want it once the talk key is gone. Use
 the × button beside any field to clear it.

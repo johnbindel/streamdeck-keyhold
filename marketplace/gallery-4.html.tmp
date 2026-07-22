@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8"><link rel="stylesheet" href="gallery.css">
+<style>
+	.actions { display: grid; grid-template-columns: auto 1fr; gap: 34px 30px; align-items: center; }
+	.actions img { width: 76px; height: 76px; }
+	.actions h3 { font-size: 40px; font-weight: 700; margin-bottom: 6px; }
+	.actions p { font-size: 30px; max-width: 1180px; }
+</style>
+<div class="stack" style="gap:44px">
+	<h2>Four ways to send a key</h2>
+	<div class="actions">
+		<img src="../imgs/marks/hold.svg" alt="" />
+		<div><h3>Hold Key</h3><p>Held down for exactly as long as you hold the button or pedal.</p></div>
+		<img src="../imgs/marks/toggle.svg" alt="" />
+		<div><h3>Toggle Hold</h3><p>Press once to start holding, press again to let go. The key lights up while it runs.</p></div>
+		<img src="../imgs/marks/timed.svg" alt="" />
+		<div><h3>Timed Tap</h3><p>One press, held for a time you set. For apps that ignore an instant tap.</p></div>
+		<img src="../imgs/marks/repeat.svg" alt="" />
+		<div><h3>Repeat Key</h3><p>Sent over and over while pressed, for anything that acts on each keypress.</p></div>
+	</div>
+</div>

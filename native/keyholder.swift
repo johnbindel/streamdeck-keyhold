@@ -4,6 +4,16 @@
 //   D <id> <mods> <key>   press and HOLD under <id>. Either combo field may be "-".
 //   U <id>                release the hold owned by <id>
 //   T <mods> <key>        TAP a combo without disturbing anything held
+//   C 1 / C 0             start / stop capturing the keyboard
+//
+// Replies on stdout, one per line:
+//   CAPTURE on|off|failed
+//   K D <name> / K U <name>   a key went down or up while capturing ("-" if unrecognised)
+//
+// Capture exists because the property inspector is a web view: by the time a keystroke
+// reaches it the system has already acted on it, so recording ⌃⌥⌘T would fire whatever
+// ⌃⌥⌘T is bound to instead of recording it. An event tap sees keys first and swallows
+// them, which is the only way to record a combination that is already a shortcut.
 //
 // Holds are keyed by id because several Stream Deck buttons or pedals can be down at
 // once, and each must release only its own keys. A shared key or modifier stays down
@@ -52,6 +62,26 @@ enum Keyholder {
         "alt": (58, .maskAlternate), "lalt": (58, .maskAlternate), "ralt": (61, .maskAlternate),
         "shift": (56, .maskShift), "lshift": (56, .maskShift), "rshift": (60, .maskShift),
         "cmd": (55, .maskCommand), "lcmd": (55, .maskCommand), "rcmd": (54, .maskCommand),
+    ]
+
+    /// Keycode back to the name the plugin and property inspector use. Built from `keys`
+    /// so the two can never drift apart.
+    static let keyNames: [CGKeyCode: String] = {
+        var names: [CGKeyCode: String] = [:]
+        for (name, code) in keys where names[code] == nil {
+            names[code] = name
+        }
+        return names
+    }()
+
+    /// Modifier keycode to name, side included. Unlike `modifierKeys` this cannot be
+    /// derived by inversion: three names share each keycode, and capture must report the
+    /// specific side that was pressed.
+    static let modifierNames: [CGKeyCode: (String, CGEventFlags)] = [
+        59: ("lctrl", .maskControl), 62: ("rctrl", .maskControl),
+        58: ("lalt", .maskAlternate), 61: ("ralt", .maskAlternate),
+        56: ("lshift", .maskShift), 60: ("rshift", .maskShift),
+        55: ("lcmd", .maskCommand), 54: ("rcmd", .maskCommand),
     ]
 
     struct Hold {
@@ -181,6 +211,130 @@ enum Keyholder {
     }
 }
 
+func emit(_ line: String) {
+    FileHandle.standardOutput.write(Data("\(line)\n".utf8))
+}
+
+/// Capturing swallows every keystroke, so it runs on its own thread with its own run loop
+/// and can never outlive its welcome: the timer stops it even if the plugin goes away
+/// mid-recording. A wedged capture would be a dead keyboard, which is as bad as a stuck key.
+enum Capture {
+    static let timeout: CFTimeInterval = 15
+    static let lock = NSLock()
+    static var loop: CFRunLoop?
+    static var stopRequested = false
+
+    /// The tap, so the callback can switch it back on. macOS disables a tap that takes too
+    /// long, and a disabled tap stops swallowing without stopping the recording.
+    static var tap: CFMachPort?
+
+    static func start() {
+        lock.lock()
+        let alreadyRunning = loop != nil
+        if !alreadyRunning { stopRequested = false }
+        lock.unlock()
+        if alreadyRunning { return }
+
+        let thread = Thread { run() }
+        thread.name = "keyholder.capture"
+        thread.start()
+    }
+
+    /// Stopping has to work even in the window between `start()` returning and the capture
+    /// thread having a run loop to stop — otherwise the request is dropped and the keyboard
+    /// stays swallowed until the timeout, which is exactly the failure this guards against.
+    static func stop() {
+        lock.lock()
+        stopRequested = true
+        let running = loop
+        lock.unlock()
+        if let running { CFRunLoopStop(running) }
+    }
+
+    private static func run() {
+        let mask = (1 << CGEventType.keyDown.rawValue)
+            | (1 << CGEventType.keyUp.rawValue)
+            | (1 << CGEventType.flagsChanged.rawValue)
+
+        // .cgSessionEventTap at the head is the earliest point a normal process can see a
+        // key, and .defaultTap (rather than .listenOnly) is what allows returning nil to
+        // swallow it.
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: CGEventMask(mask),
+            callback: onCapturedEvent,
+            userInfo: nil
+        ) else {
+            // Almost always missing Accessibility permission.
+            emit("CAPTURE failed")
+            return
+        }
+
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+
+        let deadline = CFRunLoopTimerCreateWithHandler(
+            kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + timeout, 0, 0, 0
+        ) { _ in CFRunLoopStop(CFRunLoopGetCurrent()) }
+        CFRunLoopAddTimer(CFRunLoopGetCurrent(), deadline, .commonModes)
+
+        lock.lock()
+        loop = CFRunLoopGetCurrent()
+        Capture.tap = tap
+        // A stop that arrived while this thread was still starting up saw no run loop to
+        // stop, so honour it here rather than swallowing the keyboard until the timeout.
+        let cancelled = stopRequested
+        lock.unlock()
+        emit("CAPTURE on")
+
+        if !cancelled { CFRunLoopRun() }
+
+        CGEvent.tapEnable(tap: tap, enable: false)
+        CFRunLoopRemoveTimer(CFRunLoopGetCurrent(), deadline, .commonModes)
+        CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
+        lock.lock()
+        loop = nil
+        Capture.tap = nil
+        lock.unlock()
+        emit("CAPTURE off")
+    }
+}
+
+/// A C function pointer, so it must not capture context — all state it touches is static.
+func onCapturedEvent(
+    proxy: CGEventTapProxy,
+    type: CGEventType,
+    event: CGEvent,
+    refcon: UnsafeMutableRawPointer?
+) -> Unmanaged<CGEvent>? {
+    // The system disables a tap that takes too long, and a disabled tap goes on delivering
+    // keys to whatever they are bound to while the inspector still believes it is
+    // recording. Switch it back on rather than capturing nothing from here.
+    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        Capture.lock.lock()
+        let tap = Capture.tap
+        Capture.lock.unlock()
+        if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+        return Unmanaged.passUnretained(event)
+    }
+
+    let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+
+    if type == .flagsChanged {
+        if let (name, flag) = Keyholder.modifierNames[code] {
+            emit("K \(event.flags.contains(flag) ? "D" : "U") \(name)")
+        }
+        return nil
+    }
+
+    let name = Keyholder.keyNames[code] ?? "-"
+    emit("K \(type == .keyDown ? "D" : "U") \(name)")
+    return nil
+}
+
 func onSignal(_ signum: Int32) {
     Keyholder.releaseAll()
     exit(0)
@@ -206,6 +360,17 @@ while let line = readLine(strippingNewline: true) {
     guard let verb = parts.first else { continue }
 
     switch verb {
+    case "C":
+        guard parts.count == 2 else {
+            badCommand(line)
+            continue
+        }
+        if parts[1] == "1" {
+            Capture.start()
+        } else {
+            Capture.stop()
+        }
+
     case "U":
         guard parts.count == 2 else {
             badCommand(line)

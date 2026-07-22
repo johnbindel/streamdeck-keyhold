@@ -62,10 +62,15 @@ const MOD_LABELS = {
 	lcmd: IS_MAC ? "⌘" : "Left Win", rcmd: IS_MAC ? "⌘" : "Right Win",
 };
 
-let websocket, uuid, settings = {};
+let websocket, uuid, actionUuid, settings = {};
 let recording = null;
 let pressedModifiers = new Set();
 let draftModifiers = new Set();
+
+// Whether the plugin's helper is currently swallowing the keyboard for us. While it is,
+// no key events reach this page at all — that is the point — so the DOM listeners below
+// simply never fire and act as the fallback when capture is unavailable.
+let capturing = false;
 
 // The first recorder on a page owns the unprefixed key/modifiers settings; the rest are
 // prefixed. That keeps the original action's saved settings readable by every later one.
@@ -121,14 +126,18 @@ function saveCombo(prefix, combo) {
 }
 
 function saveNumber(input) {
-	const value = Math.round(Number(input.value));
+	const raw = input.value.trim();
+	const value = Math.round(Number(raw));
 	const min = Number(input.min) || 0;
 	const max = Number(input.max) || Number.MAX_SAFE_INTEGER;
 	settings = {
 		...settings,
-		[input.dataset.number]: Number.isFinite(value) && value > min
-			? Math.min(value, max)
-			: min,
+		// An empty field means "unset", saved as 0, so the plugin falls back to the
+		// action's own default rather than to this field's minimum. Clearing "Hold for"
+		// should give you 80ms back, not 10ms.
+		[input.dataset.number]: raw === "" || !Number.isFinite(value)
+			? 0
+			: Math.min(Math.max(value, min), max),
 	};
 	save();
 }
@@ -149,11 +158,21 @@ function keyFromCode(code) {
 	return KEY_CODES[code] ?? null;
 }
 
+function sendToPlugin(payload) {
+	if (!websocket || websocket.readyState !== 1) return;
+	websocket.send(JSON.stringify({
+		event: "sendToPlugin", action: actionUuid, context: uuid, payload,
+	}));
+}
+
 function startRecording(prefix) {
 	recording = prefix;
 	pressedModifiers = new Set();
 	draftModifiers = new Set();
 	RECORDERS[prefix].value = "Press a combination…";
+	// Ask the plugin to take the keyboard, so a combination that is already a shortcut
+	// gets recorded here instead of firing whatever it is bound to.
+	sendToPlugin({ event: "startCapture" });
 }
 
 function finishRecording(prefix, key = "") {
@@ -161,40 +180,91 @@ function finishRecording(prefix, key = "") {
 	recording = null;
 	pressedModifiers.clear();
 	draftModifiers.clear();
+	sendToPlugin({ event: "stopCapture" });
 	saveCombo(prefix, combo);
 }
 
+function cancelRecording() {
+	if (recording === null) return;
+	recording = null;
+	pressedModifiers.clear();
+	draftModifiers.clear();
+	sendToPlugin({ event: "stopCapture" });
+	render();
+}
+
+/**
+ * The recorder's state machine, in terms of key names rather than browser events, so the
+ * captured keys and the DOM fallback drive exactly the same logic.
+ */
+function keyWentDown(prefix, name) {
+	if (MODIFIER_TOKENS.includes(name)) {
+		pressedModifiers.add(name);
+		draftModifiers.add(name);
+		const partial = displayCombo({ key: "", mods: MODIFIER_TOKENS.filter((m) => draftModifiers.has(m)) });
+		RECORDERS[prefix].value = partial + (IS_MAC ? "" : " + ") + "…";
+		return;
+	}
+	if (!name || name === "-") {
+		RECORDERS[prefix].value = "Unsupported key — try another";
+		return;
+	}
+	finishRecording(prefix, name);
+}
+
+function keyWentUp(prefix, name) {
+	if (!MODIFIER_TOKENS.includes(name)) return;
+	pressedModifiers.delete(name);
+	// Letting go of the last modifier with no regular key pressed records a
+	// modifier-only shortcut.
+	if (pressedModifiers.size === 0 && draftModifiers.size > 0) finishRecording(prefix);
+}
+
+// The fallback path, used only when the helper could not take the keyboard — without
+// Accessibility permission on macOS, say. preventDefault stops this page acting on the
+// key, but cannot stop the system doing so first, which is exactly the limitation capture
+// exists to work around.
 function onRecorderKeyDown(prefix, event) {
-	if (recording !== prefix) return;
+	if (recording !== prefix || capturing) return;
 	event.preventDefault();
 	event.stopPropagation();
 
 	const modifier = modifierFromCode(event.code);
 	if (modifier) {
-		pressedModifiers.add(modifier);
-		draftModifiers.add(modifier);
-		const partial = displayCombo({ key: "", mods: MODIFIER_TOKENS.filter((m) => draftModifiers.has(m)) });
-		RECORDERS[prefix].value = partial + (IS_MAC ? "" : " + ") + "…";
+		keyWentDown(prefix, modifier);
 		return;
 	}
 
+	// The browser reports which modifiers are held but not which side, so a combination
+	// recorded this way loses the left/right distinction the captured path keeps.
 	if (event.ctrlKey && !draftModifiers.has("lctrl") && !draftModifiers.has("rctrl")) draftModifiers.add("ctrl");
 	if (event.altKey && !draftModifiers.has("lalt") && !draftModifiers.has("ralt")) draftModifiers.add("alt");
 	if (event.shiftKey && !draftModifiers.has("lshift") && !draftModifiers.has("rshift")) draftModifiers.add("shift");
 	if (event.metaKey && !draftModifiers.has("lcmd") && !draftModifiers.has("rcmd")) draftModifiers.add("cmd");
-	const key = keyFromCode(event.code);
-	if (key) finishRecording(prefix, key);
-	else RECORDERS[prefix].value = "Unsupported key — try another";
+	keyWentDown(prefix, keyFromCode(event.code));
 }
 
 function onRecorderKeyUp(prefix, event) {
-	if (recording !== prefix) return;
+	if (recording !== prefix || capturing) return;
 	const modifier = modifierFromCode(event.code);
 	if (!modifier) return;
 	event.preventDefault();
 	event.stopPropagation();
-	pressedModifiers.delete(modifier);
-	if (pressedModifiers.size === 0 && draftModifiers.size > 0) finishRecording(prefix);
+	keyWentUp(prefix, modifier);
+}
+
+function onPluginMessage(payload) {
+	if (payload?.event === "capture") {
+		capturing = payload.state === "on";
+		// The helper gives the keyboard back on its own after a while. If that happened
+		// mid-recording, drop back to showing what is actually saved.
+		if (!capturing && payload.state !== "failed") cancelRecording();
+		return;
+	}
+	if (payload?.event === "key" && recording !== null) {
+		if (payload.down) keyWentDown(recording, payload.name);
+		else keyWentUp(recording, payload.name);
+	}
 }
 
 for (const prefix of PREFIXES) {
@@ -204,10 +274,7 @@ for (const prefix of PREFIXES) {
 	recorder.addEventListener("keydown", (event) => onRecorderKeyDown(prefix, event));
 	recorder.addEventListener("keyup", (event) => onRecorderKeyUp(prefix, event));
 	recorder.addEventListener("blur", () => {
-		if (recording === prefix) {
-			recording = null;
-			render();
-		}
+		if (recording === prefix) cancelRecording();
 	});
 }
 
@@ -223,7 +290,9 @@ for (const button of document.querySelectorAll("[data-clear]")) {
 // eslint-disable-next-line no-unused-vars -- Stream Deck calls this by name.
 function connectElgatoStreamDeckSocket(port, propertyInspectorUUID, registerEvent, info, actionInfo) {
 	uuid = propertyInspectorUUID;
-	settings = JSON.parse(actionInfo).payload.settings ?? {};
+	const action = JSON.parse(actionInfo);
+	actionUuid = action.action;
+	settings = action.payload.settings ?? {};
 	websocket = new WebSocket("ws://127.0.0.1:" + port);
 
 	websocket.onopen = () => {
@@ -236,6 +305,9 @@ function connectElgatoStreamDeckSocket(port, propertyInspectorUUID, registerEven
 		if (msg.event === "didReceiveSettings") {
 			settings = msg.payload.settings ?? {};
 			render();
+		}
+		if (msg.event === "sendToPropertyInspector") {
+			onPluginMessage(msg.payload);
 		}
 	};
 }

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<link rel="stylesheet" href="inspector.css" />
+</head>
+<body>
+	<div class="row">
+		<div class="label">Hold</div>
+		<div class="field">
+			<input data-combo="hold" readonly placeholder="Click to record" aria-label="Hold key combination" />
+			<button data-clear="hold" title="Clear hold combination" aria-label="Clear hold combination">×</button>
+		</div>
+	</div>
+
+	<details>
+		<summary>Release options</summary>
+		<div class="row">
+			<div class="label">Before release</div>
+			<div class="field">
+				<input data-combo="preRelease" readonly placeholder="None" aria-label="Combination tapped before release" />
+				<button data-clear="preRelease" title="Clear before-release combination" aria-label="Clear before-release combination">×</button>
+			</div>
+		</div>
+		<div class="row">
+			<div class="label">After release</div>
+			<div class="field">
+				<input data-combo="release" readonly placeholder="None" aria-label="Combination tapped after release" />
+				<button data-clear="release" title="Clear after-release combination" aria-label="Clear after-release combination">×</button>
+			</div>
+		</div>
+		<div class="row">
+			<div class="label">Pause before</div>
+			<div class="field">
+				<input data-number="pauseBeforeReleaseMs" type="number" min="0" max="5000" step="10" placeholder="0"
+					aria-label="Milliseconds to wait before releasing the hold" />
+				<div class="unit">ms</div>
+			</div>
+		</div>
+		<div class="row">
+			<div class="label">Pause after</div>
+			<div class="field">
+				<input data-number="pauseAfterReleaseMs" type="number" min="0" max="5000" step="10" placeholder="0"
+					aria-label="Milliseconds to wait after releasing the hold" />
+				<div class="unit">ms</div>
+			</div>
+		</div>
+		<div class="row">
+			<div class="label">Let go after</div>
+			<div class="field">
+				<input data-number="autoReleaseSeconds" type="number" min="5" max="3600" step="5" placeholder="300"
+					aria-label="Seconds after which the hold releases by itself" />
+				<div class="unit">s</div>
+			</div>
+		</div>
+		<div class="hint">
+			The release combinations and pauses work exactly as they do for Hold Key, but run
+			on the second press rather than when you let go. <b>Let go after</b> is a safety
+			net: a latch left on is a key left down, so it releases by itself eventually.
+		</div>
+	</details>
+
+	<div class="hint">
+		Press once to start holding, press again to let go. The key lights up while it is
+		holding.
+	</div>
+
+	<script src="inspector.js"></script>
+</body>
+</html>
