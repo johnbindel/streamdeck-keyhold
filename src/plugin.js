@@ -38,11 +38,44 @@ let helper = null;
 
 function send(line) {
 	if (!helper || helper.exitCode !== null) {
-		helper = spawn(HELPER, [], { stdio: ["pipe", "ignore", "pipe"] });
+		helper = spawn(HELPER, [], { stdio: ["pipe", "pipe", "pipe"] });
 		helper.on("error", (err) => streamDeck.logger.error(`helper failed to start: ${err}`));
 		helper.stderr.on("data", (data) => streamDeck.logger.error(`helper: ${data}`));
+
+		// The helper only talks back while capturing, and every reply is one line.
+		let pending = "";
+		helper.stdout.on("data", (data) => {
+			pending += data.toString();
+			const lines = pending.split("\n");
+			pending = lines.pop() ?? "";
+			for (const reply of lines) {
+				if (reply) onHelperReply(reply.trim());
+			}
+		});
 	}
 	helper.stdin.write(`${line}\n`);
+}
+
+/**
+ * Recording a combination cannot be done in the property inspector alone. It is a web
+ * view, so by the time a keystroke arrives the system has already acted on it — recording
+ * ⌃⌥⌘T would fire whatever ⌃⌥⌘T is bound to instead of recording it, which defeats the
+ * entire point of a plugin for hotkeys that are already taken. The helper taps the
+ * keyboard, swallows the keys, and reports them here; we relay them to the inspector.
+ */
+function onHelperReply(reply) {
+	const [kind, ...rest] = reply.split(" ");
+	if (kind === "CAPTURE") {
+		reported(streamDeck.ui.sendToPropertyInspector({ event: "capture", state: rest[0] }));
+		return;
+	}
+	if (kind === "K" && rest.length === 2) {
+		reported(streamDeck.ui.sendToPropertyInspector({
+			event: "key",
+			down: rest[0] === "D",
+			name: rest[1],
+		}));
+	}
 }
 
 function comboOf(settings, prefix = "") {
@@ -280,5 +313,16 @@ streamDeck.actions.onWillDisappear((ev) => {
 	stopRepeat(ev.action.id);
 	return reported(finishHold(ev.action.id));
 });
+
+// The inspector asks for the keyboard while a recorder field has focus, and gives it back
+// the moment recording ends.
+streamDeck.ui.onSendToPlugin((ev) => {
+	if (ev.payload?.event === "startCapture") send("C 1");
+	if (ev.payload?.event === "stopCapture") send("C 0");
+});
+
+// Closing the inspector mid-recording must not leave the keyboard swallowed. The helper
+// times out by itself too, but that is the backstop, not the mechanism.
+streamDeck.ui.onDidDisappear(() => send("C 0"));
 
 streamDeck.connect();

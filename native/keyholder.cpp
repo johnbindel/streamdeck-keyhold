@@ -4,6 +4,17 @@
 //   D <id> <mods> <key>   press and HOLD under <id>. Either combo field may be "-".
 //   U <id>                release the hold owned by <id>
 //   T <mods> <key>        TAP a combo without disturbing anything held
+//   C 1 / C 0             start / stop capturing the keyboard
+//
+// Replies on stdout, one per line:
+//   CAPTURE on|off|failed
+//   K D <name> / K U <name>   a key went down or up while capturing ("-" if unrecognised)
+//
+// Capture exists because the property inspector is a web view: by the time a keystroke
+// reaches it the system has already acted on it, so recording Ctrl+Alt+T would fire
+// whatever Ctrl+Alt+T is bound to instead of recording it. A low-level keyboard hook sees
+// keys first and swallows them, which is the only way to record a combination that is
+// already a shortcut.
 //
 // Holds are keyed by id because several Stream Deck buttons or pedals can be down at
 // once, and each must release only its own keys. A shared key or modifier stays down
@@ -16,10 +27,13 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <atomic>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -182,6 +196,86 @@ void TapOver(const std::vector<KeyCode>& mods, const KeyCode& key) {
   for (auto it = extra.rbegin(); it != extra.rend(); ++it) SendKey(*it, false);
 }
 
+std::mutex g_out;
+
+void Emit(const std::string& line) {
+  std::lock_guard<std::mutex> held(g_out);
+  std::cout << line << std::endl;
+}
+
+// Virtual-key back to the name the plugin and property inspector use. Left and right
+// modifiers arrive as distinct virtual-keys in a low-level hook, so the side survives.
+std::string NameForKey(DWORD vk, bool extended) {
+  switch (vk) {
+    case VK_LCONTROL: return "lctrl";
+    case VK_RCONTROL: return "rctrl";
+    case VK_LMENU: return "lalt";
+    case VK_RMENU: return "ralt";
+    case VK_LSHIFT: return "lshift";
+    case VK_RSHIFT: return "rshift";
+    case VK_LWIN: return "lcmd";
+    case VK_RWIN: return "rcmd";
+    default: break;
+  }
+  // Return and numpad Enter share VK_RETURN and differ only by the extended bit.
+  if (vk == VK_RETURN) return extended ? "numpadenter" : "enter";
+  for (const auto& entry : kKeys) {
+    if (entry.second == vk && entry.first != "numpadenter") return entry.first;
+  }
+  return "-";
+}
+
+// Capturing swallows every keystroke, so it runs on its own thread with its own message
+// loop and cannot outlive its welcome: the timer ends it even if the plugin goes away
+// mid-recording. A wedged capture would be a dead keyboard, as bad as a stuck key.
+constexpr UINT kCaptureTimeoutMs = 15000;
+std::thread g_capture;
+std::atomic<DWORD> g_capture_thread_id{0};
+HHOOK g_hook = nullptr;
+
+LRESULT CALLBACK OnCapturedKey(int code, WPARAM w_param, LPARAM l_param) {
+  if (code != HC_ACTION) return CallNextHookEx(nullptr, code, w_param, l_param);
+  const KBDLLHOOKSTRUCT* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(l_param);
+  const bool up = (key->flags & LLKHF_UP) != 0;
+  Emit(std::string("K ") + (up ? "U " : "D ") +
+       NameForKey(key->vkCode, (key->flags & LLKHF_EXTENDED) != 0));
+  return 1;  // swallow it, so the shortcut it would trigger does not fire
+}
+
+void CaptureRun() {
+  g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, OnCapturedKey, GetModuleHandleW(nullptr), 0);
+  if (!g_hook) {
+    Emit("CAPTURE failed");
+    return;
+  }
+  g_capture_thread_id = GetCurrentThreadId();
+  const UINT_PTR deadline = SetTimer(nullptr, 0, kCaptureTimeoutMs, nullptr);
+  Emit("CAPTURE on");
+
+  MSG msg;
+  while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+    if (msg.message == WM_TIMER) break;
+  }
+
+  KillTimer(nullptr, deadline);
+  UnhookWindowsHookEx(g_hook);
+  g_hook = nullptr;
+  g_capture_thread_id = 0;
+  Emit("CAPTURE off");
+}
+
+void StopCapture() {
+  const DWORD id = g_capture_thread_id.load();
+  if (id != 0) PostThreadMessageW(id, WM_QUIT, 0, 0);
+  if (g_capture.joinable()) g_capture.join();
+}
+
+void StartCapture() {
+  if (g_capture_thread_id.load() != 0) return;
+  if (g_capture.joinable()) g_capture.join();
+  g_capture = std::thread(CaptureRun);
+}
+
 BOOL WINAPI OnConsoleEvent(DWORD) {
   ReleaseAll();
   ExitProcess(0);
@@ -205,6 +299,19 @@ int main() {
     std::string verb;
     stream >> verb;
 
+    if (verb == "C") {
+      std::string state;
+      if (!(stream >> state)) {
+        std::cerr << "keyholder: bad command: " << line << "\n";
+        continue;
+      }
+      if (state == "1") {
+        StartCapture();
+      } else {
+        StopCapture();
+      }
+      continue;
+    }
     if (verb == "U") {
       std::string id;
       if (!(stream >> id)) {
@@ -255,7 +362,9 @@ int main() {
     }
   }
 
-  // stdin closed — Stream Deck killed the plugin. Never leave a key down.
+  // stdin closed — Stream Deck killed the plugin. Never leave a key down, and never leave
+  // the keyboard swallowed.
+  StopCapture();
   ReleaseAll();
   return 0;
 }

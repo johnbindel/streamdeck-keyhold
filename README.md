@@ -41,6 +41,26 @@ There is one other open-source plugin using this seam,
 [voji/hotkeyhold_sd](https://github.com/voji/sendkey_sd) — but it's Windows-only and has no
 modifier support. As far as I can tell, this is the first macOS implementation.
 
+## Recording a shortcut that is already taken
+
+The whole point of this plugin is to send a hotkey another app is listening for — so
+recording it must not trigger it. A property inspector is a web view, and by the time a
+keystroke reaches one the system has already acted on it: `preventDefault` stops the page
+from responding, but cannot stop macOS or Windows from having already fired whatever the
+combination is bound to. Elgato's own Hotkey field avoids this by capturing below the
+browser, which no part of the plugin SDK exposes.
+
+So the helper does it. While a recorder field has focus, the plugin asks the helper to tap
+the keyboard, swallow every key, and report what it saw; the property inspector builds the
+combination from those reports instead of from browser events. Recording `⌃⌥⌘T` records it
+rather than firing it, and keys the system would otherwise eat entirely — `⌘Tab`, `⌃↑` —
+are recordable too.
+
+Two things make a swallowed keyboard safe: the helper releases it after fifteen seconds no
+matter what, and the plugin releases it as soon as the inspector closes. If the tap cannot
+be created at all — no Accessibility permission on macOS — recording falls back to browser
+events, which still works for combinations that are not already shortcuts.
+
 ## Modifier-only shortcuts
 
 The recorder accepts regular keys, key combinations, and modifier-only shortcuts made from
