@@ -58,39 +58,70 @@ function comboOf(settings, prefix = "") {
 	return key || mods.length ? { key, mods } : null;
 }
 
-function command(verb, { key, mods }) {
-	return `${verb} ${mods.length ? mods.join(",") : "-"} ${key || "-"}`;
+function comboFields({ key, mods }) {
+	return `${mods.length ? mods.join(",") : "-"} ${key || "-"}`;
 }
 
 /**
- * Which action instances are currently holding. A pedal can be released while a
- * different profile is showing, so release is unconditional rather than re-derived from
- * settings that may have changed underneath us mid-hold.
+ * The helper keys holds by action id so two pedals held at once release only their own
+ * keys. Ids come from Stream Deck and are opaque, so strip anything that would confuse a
+ * space-delimited protocol.
+ */
+function holdId(actionId) {
+	return String(actionId).replace(/\s+/g, "");
+}
+
+/**
+ * A hold that never ends is the worst failure this plugin has — it leaves a key down
+ * until the machine is logged out. Stream Deck normally sends onKeyUp, but a key-up can
+ * be lost if the device is unplugged or the profile changes mid-hold, so every hold gets
+ * a deadline as a backstop.
+ */
+const MAX_HOLD_MS = 5 * 60 * 1000;
+
+/**
+ * Which action instances are currently holding. The combos to run on release are captured
+ * at key-down: a pedal can be released while a different profile is showing, so release
+ * must not be re-derived from settings that may have changed underneath us mid-hold.
  */
 const holding = new Map();
 
-streamDeck.actions.onKeyDown((ev) => {
-	const heldCombo = comboOf(ev.payload.settings);
-	if (heldCombo) send(command("D", heldCombo));
-	holding.set(ev.action.id, {
+function beginHold(actionId, settings) {
+	finishHold(actionId);
+	const heldCombo = comboOf(settings);
+	if (heldCombo) send(`D ${holdId(actionId)} ${comboFields(heldCombo)}`);
+	holding.set(actionId, {
 		held: !!heldCombo,
-		preReleaseCombo: comboOf(ev.payload.settings, "preRelease"),
-		releaseCombo: comboOf(ev.payload.settings, "release"),
+		preReleaseCombo: comboOf(settings, "preRelease"),
+		releaseCombo: comboOf(settings, "release"),
+		deadline: setTimeout(() => {
+			streamDeck.logger.warn(`hold on ${actionId} passed ${MAX_HOLD_MS}ms; releasing it`);
+			finishHold(actionId);
+		}, MAX_HOLD_MS),
 	});
-});
+}
 
 /**
- * Order matters and is the whole point of having two slots: "B" taps on top of the hold
- * while it is still down, "T" taps after it is gone. An app whose push-to-talk ends on a
- * separate hotkey needs one or the other, and which one is not something we can guess.
+ * Order matters and is the whole point of having two slots: the first tap lands on top of
+ * the hold while it is still down, the second after it is gone. An app whose push-to-talk
+ * ends on a separate hotkey needs one or the other, and which one is not something we can
+ * guess.
  */
-streamDeck.actions.onKeyUp((ev) => {
-	if (!holding.has(ev.action.id)) return;
-	const { held, preReleaseCombo, releaseCombo } = holding.get(ev.action.id);
-	holding.delete(ev.action.id);
-	if (preReleaseCombo) send(command("B", preReleaseCombo));
-	if (held) send("U");
-	if (releaseCombo) send(command("T", releaseCombo));
-});
+function finishHold(actionId) {
+	const hold = holding.get(actionId);
+	if (!hold) return;
+	holding.delete(actionId);
+	clearTimeout(hold.deadline);
+	if (hold.preReleaseCombo) send(`T ${comboFields(hold.preReleaseCombo)}`);
+	if (hold.held) send(`U ${holdId(actionId)}`);
+	if (hold.releaseCombo) send(`T ${comboFields(hold.releaseCombo)}`);
+}
+
+streamDeck.actions.onKeyDown((ev) => beginHold(ev.action.id, ev.payload.settings));
+streamDeck.actions.onKeyUp((ev) => finishHold(ev.action.id));
+
+// The button is going away — switched profile, unplugged device, page change. Its key-up
+// may never arrive, so let go now rather than leave the key down.
+streamDeck.actions.onWillDisappear((ev) => finishHold(ev.action.id));
 
 streamDeck.connect();

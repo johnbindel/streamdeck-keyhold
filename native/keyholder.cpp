@@ -1,10 +1,13 @@
-// keyholder (Windows) — holds a key combo down until told to release.
+// keyholder (Windows) — holds key combos down until told to release.
 //
 // Protocol, one command per line on stdin:
-//   D <mods> <key>   press and HOLD. Either field may be "-".
-//   U                release whatever is held
-//   T <mods> <key>   TAP a combo (press and release). mods is a comma list.
-//   B <mods> <key>   TAP a combo on top of whatever is held, leaving the hold down.
+//   D <id> <mods> <key>   press and HOLD under <id>. Either combo field may be "-".
+//   U <id>                release the hold owned by <id>
+//   T <mods> <key>        TAP a combo without disturbing anything held
+//
+// Holds are keyed by id because several Stream Deck buttons or pedals can be down at
+// once, and each must release only its own keys. A shared key or modifier stays down
+// until the last hold that wants it lets go.
 //
 // Unlike macOS (where a combo is one event carrying modifier flags), SendInput has no
 // flags field: the modifier keys must be physically pressed, then the key, and released
@@ -72,9 +75,25 @@ struct KeyCode {
   }
 };
 
-// What is currently held, in press order, so we can always release it — even if the
+struct Hold {
+  std::string id;
+  KeyCode key;  // vk == 0 when the combo is modifiers only
+  std::vector<KeyCode> mods;
+};
+
+// Everything currently held, in press order, so we can always release it — even if the
 // plugin dies mid-hold. A stuck key is the worst failure here.
-std::vector<KeyCode> g_held;
+std::vector<Hold> g_holds;
+
+// Is this key down on behalf of any hold? Keys are never pressed twice or released while
+// another hold still wants them.
+bool IsDown(const KeyCode& key) {
+  for (const Hold& hold : g_holds) {
+    if (hold.key == key) return true;
+    if (std::find(hold.mods.begin(), hold.mods.end(), key) != hold.mods.end()) return true;
+  }
+  return false;
+}
 
 bool IsExtendedKey(WORD vk) {
   switch (vk) {
@@ -113,42 +132,48 @@ void SendKey(const KeyCode& key, bool down) {
   SendInput(1, &input, sizeof(INPUT));
 }
 
-void ReleaseHeld() {
-  // Reverse order: key first, then modifiers.
-  for (auto it = g_held.rbegin(); it != g_held.rend(); ++it) {
-    SendKey(*it, false);
+void ReleaseHold(const std::string& id) {
+  auto it = std::find_if(g_holds.begin(), g_holds.end(),
+                         [&](const Hold& hold) { return hold.id == id; });
+  if (it == g_holds.end()) return;
+
+  const Hold hold = *it;
+  g_holds.erase(it);
+
+  // Reverse order: key first, then modifiers — but only what no other hold still wants.
+  if (hold.key && !IsDown(hold.key)) SendKey(hold.key, false);
+  for (auto m = hold.mods.rbegin(); m != hold.mods.rend(); ++m) {
+    if (!IsDown(*m)) SendKey(*m, false);
   }
-  g_held.clear();
 }
 
-void Press(const std::vector<KeyCode>& mods, const KeyCode& key) {
-  ReleaseHeld();
+void ReleaseAll() {
+  while (!g_holds.empty()) {
+    ReleaseHold(g_holds.back().id);
+  }
+}
+
+void Press(const std::string& id, const std::vector<KeyCode>& mods, const KeyCode& key) {
+  ReleaseHold(id);
   for (const KeyCode& m : mods) {
-    SendKey(m, true);
-    g_held.push_back(m);
+    if (!IsDown(m)) SendKey(m, true);
   }
-  if (key) {
-    SendKey(key, true);
-    g_held.push_back(key);
-  }
+  if (key && !IsDown(key)) SendKey(key, true);
+  g_holds.push_back(Hold{id, key, mods});
 }
 
-// Tap a combo *without* disturbing the hold — this is what makes a "before release"
+// Tap a combo *without* disturbing any hold — this is what makes a "before release"
 // hotkey different from an "after release" one. Modifiers already down are reused rather
 // than re-pressed, and a tap key identical to a held key is skipped: its key-up would
-// cancel the very hold we are trying to preserve.
+// cancel the hold that owns it.
 void TapOver(const std::vector<KeyCode>& mods, const KeyCode& key) {
-  const auto is_held = [](const KeyCode& k) {
-    return std::find(g_held.begin(), g_held.end(), k) != g_held.end();
-  };
-
   std::vector<KeyCode> extra;
   for (const KeyCode& m : mods) {
-    if (!is_held(m)) extra.push_back(m);
+    if (!IsDown(m)) extra.push_back(m);
   }
 
   for (const KeyCode& m : extra) SendKey(m, true);
-  if (key && !is_held(key)) {
+  if (key && !IsDown(key)) {
     SendKey(key, true);
     SendKey(key, false);
   } else if (key) {
@@ -158,7 +183,7 @@ void TapOver(const std::vector<KeyCode>& mods, const KeyCode& key) {
 }
 
 BOOL WINAPI OnConsoleEvent(DWORD) {
-  ReleaseHeld();
+  ReleaseAll();
   ExitProcess(0);
   return TRUE;
 }
@@ -181,13 +206,26 @@ int main() {
     stream >> verb;
 
     if (verb == "U") {
-      ReleaseHeld();
+      std::string id;
+      if (!(stream >> id)) {
+        std::cerr << "keyholder: bad command: " << line << "\n";
+        continue;
+      }
+      ReleaseHold(id);
       continue;
     }
-    if (verb != "D" && verb != "T" && verb != "B") continue;
+    if (verb != "D" && verb != "T") continue;
 
-    std::string mod_list, key_name;
-    stream >> mod_list >> key_name;
+    std::string id, mod_list, key_name;
+    const bool is_hold = verb == "D";
+    if (is_hold && !(stream >> id)) {
+      std::cerr << "keyholder: bad command: " << line << "\n";
+      continue;
+    }
+    if (!(stream >> mod_list >> key_name)) {
+      std::cerr << "keyholder: bad command: " << line << "\n";
+      continue;
+    }
 
     KeyCode key_code;
     const std::string key_lower = Lower(key_name);
@@ -210,15 +248,14 @@ int main() {
     }
 
     if (mods.empty() && !key_code) continue;
-    if (verb == "B") {
+    if (is_hold) {
+      Press(id, mods, key_code);
+    } else {
       TapOver(mods, key_code);
-      continue;
     }
-    Press(mods, key_code);
-    if (verb == "T") ReleaseHeld();
   }
 
   // stdin closed — Stream Deck killed the plugin. Never leave a key down.
-  ReleaseHeld();
+  ReleaseAll();
   return 0;
 }
