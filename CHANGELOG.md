@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.3.0
+
+**Requires Stream Deck 6.9 or later.** Elgato's Marketplace requires plugins to declare
+SDK version 3, which in turn requires app version 6.9, and that combination is what makes a
+plugin eligible for Marketplace's DRM — file encryption and tamper checking. Nothing about
+how the plugin behaves changes; if you are on an older Stream Deck, 1.2.0 remains available
+and works.
+
+**The plugin no longer ships with the Node debugger switched on.** The manifest asked for
+`--inspect`, which is a development convenience that had no business in a released build.
+
 ## 1.2.0
 
 **Recording a hotkey no longer fires it.** The whole point of this plugin is to send a
