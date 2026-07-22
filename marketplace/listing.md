@@ -20,34 +20,22 @@ means changing the other)
 
 ## Description
 
-Between 250 and 1,500 characters; this is ~1,150.
+Between 250 and 1,500 characters; this is 1448.
 
-> Stream Deck cannot hold a key down. Press a key and it sends a keystroke and lets go
-> immediately, which makes push-to-talk impossible — a dictation app waiting for you to
-> *hold* a hotkey sees a tap and stops listening instantly.
+> Stream Deck cannot hold a key down. It sends a keystroke and lets go instantly, which makes push-to-talk impossible — a dictation app waiting for you to *hold* a hotkey sees a tap and stops listening.
 >
-> Key Hold holds your hotkey for exactly as long as you hold the Stream Deck key or pedal,
-> and releases it the moment you let go.
+> Key Hold holds your hotkey for exactly as long as you hold the Stream Deck key or pedal. Four actions:
 >
-> Four actions cover the ways a key can be sent:
->
-> • **Hold Key** — held for exactly as long as you hold the button or pedal.
-> • **Toggle Hold** — press once to start, press again to stop. The key lights up while it runs.
+> • **Hold Key** — held as long as you hold the button or pedal.
+> • **Toggle Hold** — press once to start, again to stop. Lights up while it runs.
 > • **Timed Tap** — one press, held for a time you set, for apps that ignore an instant tap.
 > • **Repeat Key** — sent over and over while pressed, for anything that acts on each keypress.
 >
-> Record any combination by pressing it, including modifier-only shortcuts. The left or
-> right modifier you pressed is the one that gets sent.
-> Optionally tap a second hotkey before releasing — while the hold is still down — after
-> releasing, or both, with a pause either side. Works with Stream Deck keys, the Stream
-> Deck Pedal, and other Stream Deck surfaces.
+> Record a combination by pressing it — including one already bound elsewhere, because the recorder takes the keyboard while you type. Pressing your dictation app's hotkey records it rather than triggering it. Modifier-only shortcuts work, and the side you pressed is the side that gets sent.
 >
-> Built for push-to-talk dictation (Spokenly, Wispr Flow, Superwhisper), hold-to-move in
-> games, and anything else that needs a key held rather than tapped.
+> **macOS: grant Stream Deck Accessibility permission** (System Settings → Privacy & Security → Accessibility). It is needed to send keystrokes at all, and it is what lets the recorder capture a hotkey already in use. Without it, recording a combination another app listens for will trigger that app instead.
 >
-> On macOS, Stream Deck needs Accessibility permission to send keystrokes at all (System
-> Settings → Privacy & Security → Accessibility). This is the same permission the built-in
-> Hotkey action requires — if your existing Hotkey actions work, you already have it.
+> Built for push-to-talk dictation (Spokenly, Wispr Flow, Superwhisper), hold-to-move in games, and anything that needs a key held rather than tapped.
 >
 > Free and open source: github.com/johnbindel/streamdeck-keyhold
 
