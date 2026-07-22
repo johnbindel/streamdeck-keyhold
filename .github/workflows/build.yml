@@ -67,7 +67,7 @@ jobs:
           # package.json is the version source of truth. Stream Deck requires a
           # four-component version, so the generated manifest appends `.0`.
           node scripts/build-manifest.js "$OUT/manifest.json"
-          cp ui/inspector.html "$OUT/ui/inspector.html"
+          cp ui/* "$OUT/ui/"
           cp imgs/*.png "$OUT/imgs/"
 
       - uses: actions/download-artifact@v4

@@ -1,0 +1,70 @@
+/* Shared by every action's property inspector. Colours track the Stream Deck inspector
+   chrome rather than the plugin's own palette, so the panel does not look grafted on. */
+body {
+	font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+	font-size: 9pt;
+	color: #d8d8d8;
+	background: #2d2d2d;
+	margin: 0;
+	padding: 12px;
+}
+
+.row { display: flex; align-items: center; margin-bottom: 12px; }
+.label { width: 96px; text-align: right; padding-right: 8px; color: #9a9a9a; }
+.field { display: flex; flex: 1; gap: 5px; }
+
+.field input {
+	min-width: 0;
+	flex: 1;
+	background: #3d3d3d;
+	color: #d8d8d8;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	padding: 6px 8px;
+	outline: none;
+	cursor: pointer;
+}
+.field input:focus { border-color: #0088cc; }
+.field input[type="number"] { cursor: text; }
+
+.field button {
+	width: 27px;
+	border: none;
+	border-radius: 4px;
+	background: #454545;
+	color: #bbb;
+	cursor: pointer;
+}
+.field button:hover { background: #555; color: #fff; }
+
+.unit { width: 27px; line-height: 27px; text-align: center; color: #7a7a7a; }
+
+/* Progressive disclosure. Most people set one combination and never open this, so the
+   panel opens showing a single field and the rest stays one click away. <details> gives
+   us the behaviour and the keyboard handling for free. */
+details {
+	margin: 0 0 12px 104px;
+	border-top: 1px solid #3d3d3d;
+	padding-top: 10px;
+}
+summary {
+	cursor: pointer;
+	color: #9a9a9a;
+	list-style: none;
+	user-select: none;
+	margin-bottom: 12px;
+}
+summary::-webkit-details-marker { display: none; }
+summary::before { content: "▸ "; }
+details[open] > summary::before { content: "▾ "; }
+summary:hover { color: #d8d8d8; }
+details .row .label { width: 96px; margin-left: -104px; }
+
+.hint {
+	color: #7a7a7a;
+	margin-top: 12px;
+	line-height: 1.5;
+	border-top: 1px solid #3d3d3d;
+	padding-top: 10px;
+}
+.hint b { color: #9a9a9a; font-weight: 600; }

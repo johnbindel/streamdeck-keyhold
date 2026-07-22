@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<link rel="stylesheet" href="inspector.css" />
+</head>
+<body>
+	<div class="row">
+		<div class="label">Hold</div>
+		<div class="field">
+			<input data-combo="hold" readonly placeholder="Click to record" aria-label="Hold key combination" />
+			<button data-clear="hold" title="Clear hold combination" aria-label="Clear hold combination">×</button>
+		</div>
+	</div>
+
+	<details>
+		<summary>Release options</summary>
+		<div class="row">
+			<div class="label">Before release</div>
+			<div class="field">
+				<input data-combo="preRelease" readonly placeholder="None" aria-label="Combination tapped before release" />
+				<button data-clear="preRelease" title="Clear before-release combination" aria-label="Clear before-release combination">×</button>
+			</div>
+		</div>
+		<div class="row">
+			<div class="label">After release</div>
+			<div class="field">
+				<input data-combo="release" readonly placeholder="None" aria-label="Combination tapped after release" />
+				<button data-clear="release" title="Clear after-release combination" aria-label="Clear after-release combination">×</button>
+			</div>
+		</div>
+		<div class="row">
+			<div class="label">Pause before</div>
+			<div class="field">
+				<input data-number="pauseBeforeReleaseMs" type="number" min="0" max="5000" step="10" placeholder="0"
+					aria-label="Milliseconds to wait before releasing the hold" />
+				<div class="unit">ms</div>
+			</div>
+		</div>
+		<div class="row">
+			<div class="label">Pause after</div>
+			<div class="field">
+				<input data-number="pauseAfterReleaseMs" type="number" min="0" max="5000" step="10" placeholder="0"
+					aria-label="Milliseconds to wait after releasing the hold" />
+				<div class="unit">ms</div>
+			</div>
+		</div>
+		<div class="hint">
+			When you let go, <b>Before release</b> is tapped while the hold is still down, then
+			the hold is released, then <b>After release</b> is tapped. Use either, both, or
+			neither. The pauses sit either side of letting go — raise them if the target app
+			misses a hotkey that lands in the same instant as the release.
+		</div>
+	</details>
+
+	<div class="hint">
+		Click the field, then press a key combination. Ctrl, Alt/Option, Shift, and Cmd/Win can
+		be recorded by themselves. The combination stays down for exactly as long as you hold
+		the button or pedal.
+	</div>
+
+	<script>
+		// The action shipped with this combination already filled in, so it stays the
+		// default for anyone who has never saved settings.
+		window.PAGE_DEFAULTS = {
+			key: "t", ctrl: true, alt: true, cmd: true, shift: false,
+			modifiers: null,
+			preReleaseKey: "", preReleaseModifiers: null,
+			pauseBeforeReleaseMs: 0, pauseAfterReleaseMs: 0,
+			releaseKey: "", releaseCtrl: false, releaseAlt: false,
+			releaseShift: false, releaseCmd: false, releaseModifiers: null,
+		};
+	</script>
+	<script src="inspector.js"></script>
+</body>
+</html>
