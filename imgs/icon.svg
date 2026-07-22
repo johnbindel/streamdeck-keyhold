@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+	<!-- Key Hold mark: pressed down, and staying down.
+	     This file is the source of truth for every PNG in this folder — regenerate them
+	     with scripts/build-icons.sh rather than editing the rasters.
+	     Drawn on a 144 grid with heavy strokes and only three shapes, because the smallest
+	     place it lands is 20x20, where anything finer turns to mush. -->
+	<g fill="none" stroke="#ffffff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+		<path d="M38 24l34 30 34-30" />
+		<path d="M38 68l34 30 34-30" />
+		<path d="M30 122h84" />
+	</g>
+</svg>
