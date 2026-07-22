@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.2.0
+
+**Recording a hotkey no longer fires it.** The whole point of this plugin is to send a
+combination another app is listening for, and until now recording one triggered it —
+`⌃⌥⌘T` would run whatever `⌃⌥⌘T` was bound to instead of being recorded. A property
+inspector is a web view, so by the time a keystroke reaches it the system has already
+acted; nothing in the page can undo that. The plugin's helper now takes the keyboard while
+you are recording, swallows every key, and reports what it saw. Combinations the system
+would otherwise eat outright, like `⌘Tab`, are recordable too, and the left or right
+modifier you actually pressed is the one that gets stored.
+
+If the keyboard cannot be taken — no Accessibility permission on macOS — recording falls
+back to the old behaviour, which still handles combinations that are not already
+shortcuts. The keyboard is always given back: when you finish, when the inspector closes,
+and after fifteen seconds regardless.
+
+**Three new actions**, each a different interaction rather than the same one behind a
+setting:
+
+- **Toggle Hold** — press once to start holding, press again to let go. For long dictation,
+  or when holding a pedal down is uncomfortable. It lights up while it is running and lets
+  go by itself after five minutes if you forget.
+- **Timed Tap** — one press, held for a time you set. For apps that ignore a key sent and
+  released in the same instant.
+- **Repeat Key** — sends the combination over and over while you hold the button, rather
+  than holding it, for apps and games that act on each keypress.
+
+**Hold Key now shows when it is holding**, using the same lit state as Toggle Hold.
+
+**The settings panel opens with one field.** It previously showed five. The before/after
+release hotkeys and their pauses moved behind *Release options*, since most setups need
+none of them.
+
+**A correctly sized plugin icon.** The manifest pointed at a 28px image for a slot that
+wants 256px, so Stream Deck was scaling it up eightfold.
+
 ## 1.1.0
 
 **A hotkey can now be tapped before *or* after the hold is released.** The old single
