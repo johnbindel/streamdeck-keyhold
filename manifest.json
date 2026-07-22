@@ -1,7 +1,7 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Key Hold",
-	"Version": "1.0.0.0",
+	"Version": "1.0.2.0",
 	"Author": "John Bindel",
 	"Description": "Holds a key down for as long as you hold the Stream Deck key or pedal, and can optionally tap a second key when you let go. Real push-to-talk for dictation apps (Spokenly, Wispr Flow, Superwhisper), hold-to-move in games, or any feature that needs a key held rather than tapped.",
 	"Category": "Key Hold",

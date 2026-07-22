@@ -75,6 +75,10 @@ Requires Node 20+, and Xcode command line tools (macOS) or MSVC (Windows).
 
 Two things in the build are load-bearing and non-obvious:
 
+- **`package.json` is the version source of truth.** Packaging generates the plugin manifest
+  version from it and appends the fourth component required by Stream Deck (`1.0.2` becomes
+  `1.0.2.0`).
+
 - **The `createRequire` banner in the esbuild step is required.** `ws`, a CommonJS dependency
   inside `@elgato/streamdeck` itself, calls `require("events")`, which an ESM bundle cannot
   otherwise satisfy. Without the banner the plugin throws on import, before any of its own

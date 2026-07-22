@@ -47,6 +47,10 @@ jobs:
 
       - run: npm install @elgato/streamdeck esbuild
 
+      - name: Verify release tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+
       - name: Assemble plugin
         run: |
           OUT=build/com.johnbindel.keyhold.sdPlugin
@@ -60,7 +64,9 @@ jobs:
             --outfile="$OUT/bin/plugin.js" \
             --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
 
-          cp manifest.json "$OUT/manifest.json"
+          # package.json is the version source of truth. Stream Deck requires a
+          # four-component version, so the generated manifest appends `.0`.
+          node scripts/build-manifest.js "$OUT/manifest.json"
           cp ui/inspector.html "$OUT/ui/inspector.html"
           cp imgs/*.png "$OUT/imgs/"
 
