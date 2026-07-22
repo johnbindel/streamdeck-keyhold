@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<link rel="stylesheet" href="inspector.css" />
+</head>
+<body>
+	<div class="row">
+		<div class="label">Key</div>
+		<div class="field">
+			<input data-combo="hold" readonly placeholder="Click to record" aria-label="Key combination to tap" />
+			<button data-clear="hold" title="Clear combination" aria-label="Clear combination">×</button>
+		</div>
+	</div>
+	<div class="row">
+		<div class="label">Hold for</div>
+		<div class="field">
+			<input data-number="holdForMs" type="number" min="10" max="10000" step="10" placeholder="80"
+				aria-label="Milliseconds to hold the combination down" />
+			<div class="unit">ms</div>
+		</div>
+	</div>
+
+	<div class="hint">
+		One press sends the combination, keeps it down for the given time, then releases it.
+		Use this when an app ignores an instant tap — 80&nbsp;ms is usually enough. Longer
+		times work too, up to 10&nbsp;seconds, for anything that has to be held on a timer.
+	</div>
+
+	<script src="inspector.js"></script>
+</body>
+</html>

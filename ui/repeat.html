@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<link rel="stylesheet" href="inspector.css" />
+</head>
+<body>
+	<div class="row">
+		<div class="label">Key</div>
+		<div class="field">
+			<input data-combo="hold" readonly placeholder="Click to record" aria-label="Key combination to repeat" />
+			<button data-clear="hold" title="Clear combination" aria-label="Clear combination">×</button>
+		</div>
+	</div>
+	<div class="row">
+		<div class="label">Rate</div>
+		<div class="field">
+			<input data-number="repeatsPerSecond" type="number" min="1" max="20" step="1" placeholder="8"
+				aria-label="Times per second to send the combination" />
+			<div class="unit">/s</div>
+		</div>
+	</div>
+
+	<div class="hint">
+		Sends the combination over and over while you hold the button or pedal, instead of
+		holding it down. For apps and games that act on each keypress and ignore a key that
+		is simply held.
+	</div>
+
+	<script src="inspector.js"></script>
+</body>
+</html>

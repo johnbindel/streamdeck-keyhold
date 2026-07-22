@@ -108,7 +108,7 @@ const MAX_HOLD_MS = 5 * 60 * 1000;
  */
 const holding = new Map();
 
-function beginHold(actionId, settings) {
+function beginHold(actionId, settings, { endsAfterMs = MAX_HOLD_MS, onDeadline } = {}) {
 	const previous = finishHold(actionId);
 	const id = nextHoldId(actionId);
 	const heldCombo = comboOf(settings);
@@ -120,10 +120,13 @@ function beginHold(actionId, settings) {
 		releaseCombo: comboOf(settings, "release"),
 		pauseBeforeRelease: pauseOf(settings, "pauseBeforeReleaseMs"),
 		pauseAfterRelease: pauseOf(settings, "pauseAfterReleaseMs"),
+		// For Timed Tap the deadline is the feature, not a backstop, so it passes its own
+		// duration and a handler that does not log the release as a fault.
 		deadline: setTimeout(() => {
-			streamDeck.logger.warn(`hold on ${actionId} passed ${MAX_HOLD_MS}ms; releasing it`);
+			if (onDeadline) onDeadline();
+			else streamDeck.logger.warn(`hold on ${actionId} passed ${endsAfterMs}ms; releasing it`);
 			reported(finishHold(actionId));
-		}, MAX_HOLD_MS),
+		}, endsAfterMs),
 	});
 	return previous;
 }
@@ -166,11 +169,116 @@ function reported(release) {
 	return release.catch((err) => streamDeck.logger.error(`release failed: ${err}`));
 }
 
-streamDeck.actions.onKeyDown((ev) => reported(beginHold(ev.action.id, ev.payload.settings)));
-streamDeck.actions.onKeyUp((ev) => reported(finishHold(ev.action.id)));
+const ACTIONS = {
+	hold: "com.johnbindel.keyhold.hold",
+	toggle: "com.johnbindel.keyhold.toggle",
+	timed: "com.johnbindel.keyhold.timed",
+	repeat: "com.johnbindel.keyhold.repeat",
+};
+
+/** Off and on images for the two actions that show whether they are currently holding. */
+const OFF = 0;
+const ON = 1;
+
+function numberOf(settings, name, { min, max, fallback }) {
+	const value = Math.round(Number(settings?.[name]));
+	if (!Number.isFinite(value) || value <= 0) return fallback;
+	return Math.min(Math.max(value, min), max);
+}
+
+/**
+ * Repeat Key sends taps rather than holding, so it needs its own bookkeeping: nothing is
+ * ever down between taps, and there is no hold for the helper to release.
+ */
+const repeating = new Map();
+
+function startRepeat(actionId, settings) {
+	stopRepeat(actionId);
+	const combo = comboOf(settings);
+	if (!combo) return;
+	const perSecond = numberOf(settings, "repeatsPerSecond", { min: 1, max: 20, fallback: 8 });
+
+	send(`T ${comboFields(combo)}`);
+	const timer = setInterval(() => send(`T ${comboFields(combo)}`), Math.round(1000 / perSecond));
+	// The same backstop the holds get: a repeat left running because a key-up was lost
+	// would type forever.
+	const deadline = setTimeout(() => {
+		streamDeck.logger.warn(`repeat on ${actionId} passed ${MAX_HOLD_MS}ms; stopping it`);
+		stopRepeat(actionId);
+	}, MAX_HOLD_MS);
+	repeating.set(actionId, { timer, deadline });
+}
+
+function stopRepeat(actionId) {
+	const repeat = repeating.get(actionId);
+	if (!repeat) return;
+	repeating.delete(actionId);
+	clearInterval(repeat.timer);
+	clearTimeout(repeat.deadline);
+}
+
+/** Press to start holding, press again to let go. */
+function toggleHold(ev) {
+	if (holding.has(ev.action.id)) {
+		return Promise.all([finishHold(ev.action.id), ev.action.setState(OFF)]);
+	}
+	const seconds = numberOf(ev.payload.settings, "autoReleaseSeconds", {
+		min: 5, max: 3600, fallback: MAX_HOLD_MS / 1000,
+	});
+	return Promise.all([
+		beginHold(ev.action.id, ev.payload.settings, {
+			endsAfterMs: seconds * 1000,
+			onDeadline: () => reported(ev.action.setState(OFF)),
+		}),
+		ev.action.setState(ON),
+	]);
+}
+
+streamDeck.actions.onKeyDown((ev) => {
+	switch (ev.action.manifestId) {
+		case ACTIONS.toggle:
+			return reported(toggleHold(ev));
+		case ACTIONS.timed:
+			return reported(beginHold(ev.action.id, ev.payload.settings, {
+				endsAfterMs: numberOf(ev.payload.settings, "holdForMs", {
+					min: 10, max: 10000, fallback: 80,
+				}),
+				onDeadline: () => {},
+			}));
+		case ACTIONS.repeat:
+			startRepeat(ev.action.id, ev.payload.settings);
+			return Promise.resolve();
+		default:
+			return reported(Promise.all([
+				beginHold(ev.action.id, ev.payload.settings),
+				ev.action.setState(ON),
+			]));
+	}
+});
+
+streamDeck.actions.onKeyUp((ev) => {
+	switch (ev.action.manifestId) {
+		// Toggle Hold is driven entirely by key-down, and Timed Tap by its own timer.
+		case ACTIONS.toggle:
+		case ACTIONS.timed:
+			return Promise.resolve();
+		case ACTIONS.repeat:
+			stopRepeat(ev.action.id);
+			return Promise.resolve();
+		default:
+			return reported(Promise.all([
+				finishHold(ev.action.id),
+				ev.action.setState(OFF),
+			]));
+	}
+});
 
 // The button is going away — switched profile, unplugged device, page change. Its key-up
-// may never arrive, so let go now rather than leave the key down.
-streamDeck.actions.onWillDisappear((ev) => reported(finishHold(ev.action.id)));
+// may never arrive, so let go now rather than leave the key down. This applies to every
+// action, including the latch, which is otherwise happy to stay on indefinitely.
+streamDeck.actions.onWillDisappear((ev) => {
+	stopRepeat(ev.action.id);
+	return reported(finishHold(ev.action.id));
+});
 
 streamDeck.connect();

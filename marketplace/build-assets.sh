@@ -24,13 +24,13 @@ shoot() {  # shoot <page.html> <out.png> <width> <height> [scale]
 	echo "$2 $(sips -g pixelWidth -g pixelHeight "$2" | tr -d '\n' | sed 's/.*pixelWidth: //;s/ *pixelHeight: /x/')"
 }
 
-rsvg-convert -w 288 -h 288 ../imgs/plugin-icon.svg -o app-icon.png
+rsvg-convert -w 288 -h 288 ../imgs/marks/plugin.svg -o app-icon.png
 echo "app-icon.png 288x288"
 
 # The inspector screenshot: inject a fake socket so the real page renders real settings.
 python3 - <<'PY'
 import pathlib
-html = pathlib.Path("../ui/inspector.html").read_text()
+html = pathlib.Path("../ui/hold.html").read_text()
 stub = """
 <script>
 window.addEventListener("load", () => {
@@ -45,13 +45,17 @@ window.addEventListener("load", () => {
 });
 </script>
 """
+# Open the disclosure: the gallery shot should show every setting, even though
+# the panel opens collapsed for real use.
+html = html.replace("<details>", "<details open>")
 pathlib.Path("inspector-demo.html").write_text(html.replace("</body>", stub + "</body>"))
 PY
-shoot inspector-demo.html inspector.png 500 300 2
+shoot inspector-demo.html inspector.png 500 380 2
 
 shoot thumbnail.html thumbnail.png 1920 960
 shoot gallery-1.html gallery-1.png 1920 960
 shoot gallery-2.html gallery-2.png 1920 960
 shoot gallery-3.html gallery-3.png 1920 960
+shoot gallery-4.html gallery-4.png 1920 960
 
 rm -f inspector-demo.html

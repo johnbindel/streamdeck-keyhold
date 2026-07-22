@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+	<!-- Timed Tap: one press down, and a bar that runs out. The dashes carry the idea of a
+	     duration without needing a clock face, which turns to mush at 20px. -->
+	<g fill="none" stroke="#ffffff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+		<path d="M72 26v42" />
+		<path d="M38 62l34 30 34-30" />
+		<path d="M30 122h20" />
+		<path d="M76 122h20" />
+		<path d="M110 122h4" />
+	</g>
+</svg>

@@ -29,13 +29,18 @@ Between 250 and 1,500 characters; this is ~1,150.
 > Key Hold holds your hotkey for exactly as long as you hold the Stream Deck key or pedal,
 > and releases it the moment you let go.
 >
-> • Record any combination by pressing it, including modifier-only shortcuts. The left or
+> Four actions cover the ways a key can be sent:
+>
+> • **Hold Key** — held for exactly as long as you hold the button or pedal.
+> • **Toggle Hold** — press once to start, press again to stop. The key lights up while it runs.
+> • **Timed Tap** — one press, held for a time you set, for apps that ignore an instant tap.
+> • **Repeat Key** — sent over and over while pressed, for anything that acts on each keypress.
+>
+> Record any combination by pressing it, including modifier-only shortcuts. The left or
 > right modifier you pressed is the one that gets sent.
-> • Optionally tap a second hotkey before releasing — while the hold is still down — after
-> releasing, or both. Some apps need one, some need the other.
-> • Optional pauses either side of the release, for apps that miss a hotkey arriving in the
-> same instant as the key it follows.
-> • Works with Stream Deck keys, the Stream Deck Pedal, and other Stream Deck surfaces.
+> Optionally tap a second hotkey before releasing — while the hold is still down — after
+> releasing, or both, with a pause either side. Works with Stream Deck keys, the Stream
+> Deck Pedal, and other Stream Deck surfaces.
 >
 > Built for push-to-talk dictation (Spokenly, Wispr Flow, Superwhisper), hold-to-move in
 > games, and anything else that needs a key held rather than tapped.
@@ -55,6 +60,7 @@ Between 250 and 1,500 characters; this is ~1,150.
 | `gallery-1.png` | 1920×960 | Why the built-in actions don't do this |
 | `gallery-2.png` | 1920×960 | The property inspector, shot from the real UI |
 | `gallery-3.png` | 1920×960 | What happens on release |
+| `gallery-4.png` | 1920×960 | The four actions |
 
 Three gallery items are the minimum; up to ten are allowed.
 
@@ -69,10 +75,9 @@ Three gallery items are the minimum; up to ten are allowed.
 
 ## Known review risk
 
-The plugin guidelines ask for **2–30 actions**; Key Hold ships one. That is deliberate —
-the plugin does exactly one thing — but a reviewer may push back. Adding a second action
-(a latch mode, where one press starts the hold and the next ends it) would satisfy the
-guideline honestly if it comes to that.
+The plugin guidelines ask for **2–30 actions**. Key Hold ships four — Hold Key, Toggle
+Hold, Timed Tap, Repeat Key — each a different interaction rather than the same one behind
+a dropdown, following the precedent of Hotkey and Hotkey Switch being separate actions.
 
-Windows is also still untested on real hardware, which the README and release notes say
-plainly. Worth repeating to a reviewer rather than letting them discover it.
+Windows is still untested on real hardware, which the README and release notes say plainly.
+Worth repeating to a reviewer rather than letting them discover it.

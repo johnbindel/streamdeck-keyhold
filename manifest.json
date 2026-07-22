@@ -31,15 +31,73 @@
 		{
 			"Name": "Hold Key",
 			"UUID": "com.johnbindel.keyhold.hold",
-			"Icon": "imgs/action",
+			"Icon": "imgs/hold-action",
 			"Tooltip": "Holds the hotkey down while pressed. Can tap another hotkey before and/or after releasing.",
 			"PropertyInspectorPath": "ui/hold.html",
 			"Controllers": [
 				"Keypad"
 			],
+			"DisableAutomaticStates": true,
 			"States": [
 				{
-					"Image": "imgs/key",
+					"Image": "imgs/hold-key",
+					"TitleAlignment": "middle"
+				},
+				{
+					"Image": "imgs/hold-key-on",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Toggle Hold",
+			"UUID": "com.johnbindel.keyhold.toggle",
+			"Icon": "imgs/toggle-action",
+			"Tooltip": "Press once to start holding the hotkey, press again to let go.",
+			"PropertyInspectorPath": "ui/toggle.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"DisableAutomaticStates": true,
+			"States": [
+				{
+					"Image": "imgs/toggle-key",
+					"TitleAlignment": "middle"
+				},
+				{
+					"Image": "imgs/toggle-key-on",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Timed Tap",
+			"UUID": "com.johnbindel.keyhold.timed",
+			"Icon": "imgs/timed-action",
+			"Tooltip": "Taps the hotkey and holds it for a set time. For apps that ignore an instant tap.",
+			"PropertyInspectorPath": "ui/timed.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/timed-key",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Repeat Key",
+			"UUID": "com.johnbindel.keyhold.repeat",
+			"Icon": "imgs/repeat-action",
+			"Tooltip": "Taps the hotkey over and over while pressed, for apps that ignore a held key.",
+			"PropertyInspectorPath": "ui/repeat.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"States": [
+				{
+					"Image": "imgs/repeat-key",
 					"TitleAlignment": "middle"
 				}
 			]

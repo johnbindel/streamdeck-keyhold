@@ -121,14 +121,18 @@ function saveCombo(prefix, combo) {
 }
 
 function saveNumber(input) {
-	const value = Math.round(Number(input.value));
+	const raw = input.value.trim();
+	const value = Math.round(Number(raw));
 	const min = Number(input.min) || 0;
 	const max = Number(input.max) || Number.MAX_SAFE_INTEGER;
 	settings = {
 		...settings,
-		[input.dataset.number]: Number.isFinite(value) && value > min
-			? Math.min(value, max)
-			: min,
+		// An empty field means "unset", saved as 0, so the plugin falls back to the
+		// action's own default rather than to this field's minimum. Clearing "Hold for"
+		// should give you 80ms back, not 10ms.
+		[input.dataset.number]: raw === "" || !Number.isFinite(value)
+			? 0
+			: Math.min(Math.max(value, min), max),
 	};
 	save();
 }
