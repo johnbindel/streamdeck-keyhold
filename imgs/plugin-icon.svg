@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+	<!-- The plugin icon shown in Stream Deck preferences and on Marketplace, at 256 and 512.
+	     Unlike the action and category icons this one is not constrained to a white stroke on
+	     transparent, so it carries a background and can afford the depth cue: the upper
+	     chevron is dimmed, as though it has already travelled past.
+	     Regenerate the rasters with scripts/build-icons.sh. -->
+	<defs>
+		<linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+			<stop offset="0" stop-color="#333941" />
+			<stop offset="1" stop-color="#14171B" />
+		</linearGradient>
+	</defs>
+	<rect width="512" height="512" fill="url(#tile)" />
+	<g fill="none" stroke="#ffffff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+		<path d="M162 150l94 82 94-82" opacity="0.45" />
+		<path d="M162 268l94 82 94-82" />
+		<path d="M142 402h228" />
+	</g>
+</svg>
