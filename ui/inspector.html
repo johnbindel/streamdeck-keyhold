@@ -104,15 +104,22 @@
 			BracketRight: "rightbracket", Quote: "quote",
 		};
 		const IS_MAC = /Mac/.test(navigator.platform);
+		// Apple's own key legend, as printed in macOS menus. Insert has no glyph because
+		// Apple keyboards have no Insert key. Return is ↩ (U+21A9); ⏎ and ↵ are the
+		// typographic return symbols Apple does not use.
+		const MAC_KEY_LABELS = {
+			enter: "↩", space: "␣", tab: "⇥", escape: "⎋",
+			backspace: "⌫", delete: "⌦",
+			home: "↖", end: "↘", pageup: "⇞", pagedown: "⇟",
+		};
 		const KEY_LABELS = {
-			// Return is the one key macOS users read as a glyph rather than a word.
-			enter: IS_MAC ? "⏎" : "Enter",
-			space: "Space", tab: "Tab", escape: "Esc",
+			enter: "Enter", space: "Space", tab: "Tab", escape: "Esc",
 			backspace: "Backspace", delete: "Delete", insert: "Insert",
 			home: "Home", end: "End", pageup: "Page Up", pagedown: "Page Down",
 			left: "←", right: "→", up: "↑", down: "↓", semicolon: ";", equal: "=",
 			comma: ",", minus: "−", period: ".", slash: "/", backquote: "`",
 			leftbracket: "[", backslash: "\\", rightbracket: "]", quote: "'",
+			...(IS_MAC ? MAC_KEY_LABELS : {}),
 		};
 		const MOD_LABELS = {
 			ctrl: IS_MAC ? "⌃" : "Ctrl", alt: IS_MAC ? "⌥" : "Alt",
