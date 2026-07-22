@@ -36,10 +36,28 @@ const DEFAULTS = {
  */
 let helper = null;
 
+/**
+ * The last key pressed, so a failure can be shown on the device. The helper is the only
+ * thing that actually presses keys, so when it cannot start — a missing or quarantined
+ * binary, a permission the system withheld — the button would otherwise do nothing at all
+ * and give no hint why. A log file nobody opens is not feedback.
+ */
+let lastPressed = null;
+
+function helperFailed(reason) {
+	streamDeck.logger.error(reason);
+	if (lastPressed) reported(lastPressed.showAlert());
+}
+
 function send(line) {
 	if (!helper || helper.exitCode !== null) {
 		helper = spawn(HELPER, [], { stdio: ["pipe", "pipe", "pipe"] });
-		helper.on("error", (err) => streamDeck.logger.error(`helper failed to start: ${err}`));
+		helper.on("error", (err) => helperFailed(`helper failed to start: ${err}`));
+		helper.on("exit", (code, signal) => {
+			// Code 0 is the helper shutting down with the plugin, which is not a failure.
+			if (code) helperFailed(`helper exited with code ${code}`);
+			else if (signal) helperFailed(`helper was killed by ${signal}`);
+		});
 		helper.stderr.on("data", (data) => streamDeck.logger.error(`helper: ${data}`));
 
 		// The helper only talks back while capturing, and every reply is one line.
@@ -53,7 +71,11 @@ function send(line) {
 			}
 		});
 	}
-	helper.stdin.write(`${line}\n`);
+	try {
+		helper.stdin.write(`${line}\n`);
+	} catch (err) {
+		helperFailed(`could not reach the helper: ${err}`);
+	}
 }
 
 /**
@@ -268,6 +290,7 @@ function toggleHold(ev) {
 }
 
 streamDeck.actions.onKeyDown((ev) => {
+	lastPressed = ev.action;
 	switch (ev.action.manifestId) {
 		case ACTIONS.toggle:
 			return reported(toggleHold(ev));
@@ -290,6 +313,7 @@ streamDeck.actions.onKeyDown((ev) => {
 });
 
 streamDeck.actions.onKeyUp((ev) => {
+	lastPressed = ev.action;
 	switch (ev.action.manifestId) {
 		// Toggle Hold is driven entirely by key-down, and Timed Tap by its own timer.
 		case ACTIONS.toggle:
