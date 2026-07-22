@@ -30,7 +30,8 @@ const std::map<std::string, WORD> kKeys = {
     {"space", VK_SPACE},
     {"0", '0'}, {"1", '1'}, {"2", '2'}, {"3", '3'}, {"4", '4'},
     {"5", '5'}, {"6", '6'}, {"7", '7'}, {"8", '8'}, {"9", '9'},
-    {"enter", VK_RETURN}, {"tab", VK_TAB}, {"escape", VK_ESCAPE},
+    {"enter", VK_RETURN}, {"numpadenter", VK_RETURN},
+    {"tab", VK_TAB}, {"escape", VK_ESCAPE},
     {"backspace", VK_BACK}, {"delete", VK_DELETE}, {"insert", VK_INSERT},
     {"home", VK_HOME}, {"end", VK_END}, {"pageup", VK_PRIOR},
     {"pagedown", VK_NEXT}, {"left", VK_LEFT}, {"right", VK_RIGHT},
@@ -58,9 +59,22 @@ const std::map<std::string, WORD> kMods = {
     {"lcmd", VK_LWIN}, {"rcmd", VK_RWIN},
 };
 
+// A virtual-key plus its extended-key bit. Numpad Enter and Return are the same
+// VK_RETURN and are told apart only by that bit, so the flag has to travel with the key
+// rather than be derived from the virtual-key alone.
+struct KeyCode {
+  WORD vk = 0;
+  bool extended = false;
+
+  explicit operator bool() const { return vk != 0; }
+  bool operator==(const KeyCode& other) const {
+    return vk == other.vk && extended == other.extended;
+  }
+};
+
 // What is currently held, in press order, so we can always release it — even if the
 // plugin dies mid-hold. A stuck key is the worst failure here.
-std::vector<WORD> g_held;
+std::vector<KeyCode> g_held;
 
 bool IsExtendedKey(WORD vk) {
   switch (vk) {
@@ -84,12 +98,18 @@ bool IsExtendedKey(WORD vk) {
   }
 }
 
-void SendKey(WORD vk, bool down) {
+// Names whose extended bit cannot be recovered from the virtual-key, because another
+// name maps to the same one.
+KeyCode Resolve(const std::string& name, WORD vk) {
+  return KeyCode{vk, IsExtendedKey(vk) || name == "numpadenter"};
+}
+
+void SendKey(const KeyCode& key, bool down) {
   INPUT input = {};
   input.type = INPUT_KEYBOARD;
-  input.ki.wVk = vk;
+  input.ki.wVk = key.vk;
   input.ki.dwFlags = (down ? 0 : KEYEVENTF_KEYUP) |
-                     (IsExtendedKey(vk) ? KEYEVENTF_EXTENDEDKEY : 0);
+                     (key.extended ? KEYEVENTF_EXTENDEDKEY : 0);
   SendInput(1, &input, sizeof(INPUT));
 }
 
@@ -101,9 +121,9 @@ void ReleaseHeld() {
   g_held.clear();
 }
 
-void Press(const std::vector<WORD>& mods, WORD key) {
+void Press(const std::vector<KeyCode>& mods, const KeyCode& key) {
   ReleaseHeld();
-  for (WORD m : mods) {
+  for (const KeyCode& m : mods) {
     SendKey(m, true);
     g_held.push_back(m);
   }
@@ -117,17 +137,17 @@ void Press(const std::vector<WORD>& mods, WORD key) {
 // hotkey different from an "after release" one. Modifiers already down are reused rather
 // than re-pressed, and a tap key identical to a held key is skipped: its key-up would
 // cancel the very hold we are trying to preserve.
-void TapOver(const std::vector<WORD>& mods, WORD key) {
-  const auto is_held = [](WORD vk) {
-    return std::find(g_held.begin(), g_held.end(), vk) != g_held.end();
+void TapOver(const std::vector<KeyCode>& mods, const KeyCode& key) {
+  const auto is_held = [](const KeyCode& k) {
+    return std::find(g_held.begin(), g_held.end(), k) != g_held.end();
   };
 
-  std::vector<WORD> extra;
-  for (WORD m : mods) {
+  std::vector<KeyCode> extra;
+  for (const KeyCode& m : mods) {
     if (!is_held(m)) extra.push_back(m);
   }
 
-  for (WORD m : extra) SendKey(m, true);
+  for (const KeyCode& m : extra) SendKey(m, true);
   if (key && !is_held(key)) {
     SendKey(key, true);
     SendKey(key, false);
@@ -169,21 +189,23 @@ int main() {
     std::string mod_list, key_name;
     stream >> mod_list >> key_name;
 
-    WORD key_code = 0;
-    auto key = kKeys.find(Lower(key_name));
+    KeyCode key_code;
+    const std::string key_lower = Lower(key_name);
+    auto key = kKeys.find(key_lower);
     if (key_name != "-" && key == kKeys.end()) {
       std::cerr << "keyholder: unknown key: " << key_name << "\n";
       continue;
     }
-    if (key != kKeys.end()) key_code = key->second;
+    if (key != kKeys.end()) key_code = Resolve(key_lower, key->second);
 
-    std::vector<WORD> mods;
+    std::vector<KeyCode> mods;
     if (mod_list != "-") {
       std::istringstream mod_stream(mod_list);
       std::string name;
       while (std::getline(mod_stream, name, ',')) {
-        auto mod = kMods.find(Lower(name));
-        if (mod != kMods.end()) mods.push_back(mod->second);
+        const std::string mod_lower = Lower(name);
+        auto mod = kMods.find(mod_lower);
+        if (mod != kMods.end()) mods.push_back(Resolve(mod_lower, mod->second));
       }
     }
 

@@ -94,7 +94,7 @@
 			release: document.getElementById("releaseRecorder"),
 		};
 		const KEY_CODES = {
-			Enter: "enter", NumpadEnter: "enter", Space: "space", Tab: "tab",
+			Enter: "enter", NumpadEnter: "numpadenter", Space: "space", Tab: "tab",
 			Escape: "escape", Backspace: "backspace", Delete: "delete", Insert: "insert",
 			Home: "home", End: "end", PageUp: "pageup", PageDown: "pagedown",
 			ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down",
@@ -108,12 +108,12 @@
 		// Apple keyboards have no Insert key. Return is ↩ (U+21A9); ⏎ and ↵ are the
 		// typographic return symbols Apple does not use.
 		const MAC_KEY_LABELS = {
-			enter: "↩", space: "␣", tab: "⇥", escape: "⎋",
+			enter: "↩", numpadenter: "⌤", space: "␣", tab: "⇥", escape: "⎋",
 			backspace: "⌫", delete: "⌦",
 			home: "↖", end: "↘", pageup: "⇞", pagedown: "⇟",
 		};
 		const KEY_LABELS = {
-			enter: "Enter", space: "Space", tab: "Tab", escape: "Esc",
+			enter: "Enter", numpadenter: "Num Enter", space: "Space", tab: "Tab", escape: "Esc",
 			backspace: "Backspace", delete: "Delete", insert: "Insert",
 			home: "Home", end: "End", pageup: "Page Up", pagedown: "Page Down",
 			left: "←", right: "→", up: "↑", down: "↓", semicolon: ";", equal: "=",

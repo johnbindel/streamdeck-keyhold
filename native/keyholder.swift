@@ -31,7 +31,7 @@ enum Keyholder {
         "space": 49,
         "0": 29, "1": 18, "2": 19, "3": 20, "4": 21,
         "5": 23, "6": 22, "7": 26, "8": 28, "9": 25,
-        "enter": 36, "tab": 48, "escape": 53, "backspace": 51, "delete": 117,
+        "enter": 36, "numpadenter": 76, "tab": 48, "escape": 53, "backspace": 51, "delete": 117,
         "insert": 114, "home": 115, "end": 119, "pageup": 116, "pagedown": 121,
         "left": 123, "right": 124, "down": 125, "up": 126,
         "semicolon": 41, "equal": 24, "comma": 43, "minus": 27, "period": 47,
